@@ -27,28 +27,28 @@ void settings_screen_render(
     lv_obj_t *content = ui_screen_create_content(screen);
 
     lv_obj_t *card = ui_card_create(content);
-    ui_label_create(card, "Wi-Fi", UI_COLOR_TEXT, 360);
+    ui_label_create(card, "Wi-Fi", UI_COLOR_TEXT, UI_THEME_CARD_INNER_WIDTH);
 
     char status_line[96];
     snprintf(status_line, sizeof(status_line), "Status: %s", state->wifi_status);
-    ui_label_create(card, status_line, UI_COLOR_MUTED, 360);
+    ui_label_create(card, status_line, UI_COLOR_MUTED, UI_THEME_CARD_INNER_WIDTH);
 
     if (state->wifi_ssid[0] != '\0') {
         char ssid_line[96];
         snprintf(ssid_line, sizeof(ssid_line), "SSID: %s", state->wifi_ssid);
-        ui_label_create(card, ssid_line, UI_COLOR_DIM, 360);
+        ui_label_create(card, ssid_line, UI_COLOR_DIM, UI_THEME_CARD_INNER_WIDTH);
     }
 
     if (state->portal_active) {
-        ui_label_create(card, "Setup portal: LookAI-Setup", UI_COLOR_SUCCESS_TEXT, 360);
-        ui_label_create(card, "Portal IP: 192.168.4.1", UI_COLOR_SUCCESS_TEXT, 360);
+        ui_label_create(card, "Setup portal: LookAI-Setup", UI_COLOR_SUCCESS_TEXT, UI_THEME_CARD_INNER_WIDTH);
+        ui_label_create(card, "Portal IP: 192.168.4.1", UI_COLOR_SUCCESS_TEXT, UI_THEME_CARD_INNER_WIDTH);
     }
 
     ui_button_create(
         content,
         "Open Wi-Fi settings",
         UI_THEME_BUTTON_WIDTH,
-        56,
+        UI_THEME_BUTTON_HEIGHT,
         UI_COLOR_PRIMARY,
         wifi_button_cb,
         NULL

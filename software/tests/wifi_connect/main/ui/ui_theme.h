@@ -1,6 +1,6 @@
 /**
  * @file ui/ui_theme.h
- * @brief Shared LVGL UI theme constants.
+ * @brief Shared LVGL UI theme constants tuned for a circular display.
  */
 
 #pragma once
@@ -8,29 +8,73 @@
 #include <stdint.h>
 
 /**
- * @brief Width of the round AMOLED display content area used by our layouts.
+ * @brief Physical round AMOLED display width.
  */
 #define UI_THEME_SCREEN_WIDTH 466
 
 /**
- * @brief Height of the round AMOLED display content area used by our layouts.
+ * @brief Physical round AMOLED display height.
  */
 #define UI_THEME_SCREEN_HEIGHT 466
 
 /**
- * @brief Scrollable content width used by menu screens.
+ * @brief App bar height.
+ *
+ * The app bar intentionally stays inside the circular safe area and uses a
+ * transparent background.
  */
-#define UI_THEME_CONTENT_WIDTH 422
+#define UI_THEME_APPBAR_HEIGHT 64
 
 /**
- * @brief Card width used by menu screens.
+ * @brief Circular-safe AppBar width.
+ *
+ * The AppBar is intentionally narrower than the body because it sits near the
+ * top of the round display where horizontal safe area is smaller.
  */
-#define UI_THEME_CARD_WIDTH 398
+#define UI_THEME_APPBAR_WIDTH 286
+
+/**
+ * @brief App bar Y offset.
+ */
+#define UI_THEME_APPBAR_Y 18
+
+/**
+ * @brief Scrollable content width.
+ *
+ * This is narrower than the physical display because the panel is circular.
+ * Wider content clips near the top/bottom of the circle.
+ */
+#define UI_THEME_CONTENT_WIDTH 354
+
+/**
+ * @brief Scrollable content height.
+ */
+#define UI_THEME_CONTENT_HEIGHT 330
+
+/**
+ * @brief Scrollable content Y offset.
+ */
+#define UI_THEME_CONTENT_Y 88
+
+/**
+ * @brief Card width inside circular safe area.
+ */
+#define UI_THEME_CARD_WIDTH 330
+
+/**
+ * @brief Inner content width inside cards.
+ */
+#define UI_THEME_CARD_INNER_WIDTH 292
 
 /**
  * @brief Default full-width button width.
  */
-#define UI_THEME_BUTTON_WIDTH 382
+#define UI_THEME_BUTTON_WIDTH 330
+
+/**
+ * @brief Default button height.
+ */
+#define UI_THEME_BUTTON_HEIGHT 54
 
 /**
  * @brief Common UI colors.

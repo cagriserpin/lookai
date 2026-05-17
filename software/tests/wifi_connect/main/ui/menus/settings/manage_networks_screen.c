@@ -21,7 +21,7 @@ static void render_network_card(
     lv_obj_t *card = ui_card_create(content);
 
     lv_obj_t *row = lv_obj_create(card);
-    lv_obj_set_width(row, 360);
+    lv_obj_set_width(row, UI_THEME_CARD_INNER_WIDTH);
     lv_obj_set_height(row, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(row, 0, 0);
@@ -36,19 +36,19 @@ static void render_network_card(
     );
 
     lv_obj_t *text_box = lv_obj_create(row);
-    lv_obj_set_size(text_box, 230, LV_SIZE_CONTENT);
+    lv_obj_set_size(text_box, 174, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(text_box, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(text_box, 0, 0);
     lv_obj_set_style_pad_all(text_box, 0, 0);
     lv_obj_set_style_pad_gap(text_box, 4, 0);
     lv_obj_set_flex_flow(text_box, LV_FLEX_FLOW_COLUMN);
 
-    ui_label_create(text_box, item->ssid, UI_COLOR_TEXT, 220);
+    ui_label_create(text_box, item->ssid, UI_COLOR_TEXT, 170);
     ui_label_create(
         text_box,
-        item->connected ? "Currently connected" : "Saved network",
+        item->connected ? "Connected" : "Saved",
         item->connected ? UI_COLOR_SUCCESS_TEXT : UI_COLOR_DIM,
-        220
+        170
     );
 
     lv_obj_t *actions = lv_obj_create(row);
@@ -99,14 +99,14 @@ void manage_networks_screen_render(
 
     if (state->saved_items_count <= 0) {
         lv_obj_t *card = ui_card_create(content);
-        ui_label_create(card, "No saved networks", UI_COLOR_TEXT, 360);
-        ui_label_create(card, "Use Connect another network to add one.", UI_COLOR_MUTED, 360);
+        ui_label_create(card, "No saved networks", UI_COLOR_TEXT, UI_THEME_CARD_INNER_WIDTH);
+        ui_label_create(card, "Use Connect another network to add one.", UI_COLOR_MUTED, UI_THEME_CARD_INNER_WIDTH);
 
         ui_button_create(
             content,
             state->portal_active ? "Close captive portal" : "Connect another network",
             UI_THEME_BUTTON_WIDTH,
-            56,
+            UI_THEME_BUTTON_HEIGHT,
             state->portal_active ? UI_COLOR_DANGER : UI_COLOR_PRIMARY,
             portal_toggle_cb,
             NULL
@@ -128,7 +128,7 @@ void manage_networks_screen_render(
         content,
         state->portal_active ? "Close captive portal" : "Add new network",
         UI_THEME_BUTTON_WIDTH,
-        56,
+        UI_THEME_BUTTON_HEIGHT,
         state->portal_active ? UI_COLOR_DANGER : UI_COLOR_PRIMARY,
         portal_toggle_cb,
         NULL

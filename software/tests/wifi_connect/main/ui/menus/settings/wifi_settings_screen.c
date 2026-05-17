@@ -30,11 +30,11 @@ void wifi_settings_screen_render(
     lv_obj_t *content = ui_screen_create_content(screen);
 
     lv_obj_t *status_card = ui_card_create(content);
-    ui_label_create(status_card, "Connection status", UI_COLOR_TEXT, 360);
+    ui_label_create(status_card, "Connection status", UI_COLOR_TEXT, UI_THEME_CARD_INNER_WIDTH);
 
     char status_line[96];
     snprintf(status_line, sizeof(status_line), "Status: %s", state->wifi_status);
-    ui_label_create(status_card, status_line, UI_COLOR_MUTED, 360);
+    ui_label_create(status_card, status_line, UI_COLOR_MUTED, UI_THEME_CARD_INNER_WIDTH);
 
     char ssid_line[96];
     snprintf(
@@ -43,7 +43,7 @@ void wifi_settings_screen_render(
         "SSID: %s",
         state->wifi_ssid[0] != '\0' ? state->wifi_ssid : "-"
     );
-    ui_label_create(status_card, ssid_line, UI_COLOR_MUTED, 360);
+    ui_label_create(status_card, ssid_line, UI_COLOR_MUTED, UI_THEME_CARD_INNER_WIDTH);
 
     char ip_line[64];
     snprintf(
@@ -52,25 +52,25 @@ void wifi_settings_screen_render(
         "IP: %s",
         state->wifi_ip[0] != '\0' ? state->wifi_ip : "-"
     );
-    ui_label_create(status_card, ip_line, UI_COLOR_MUTED, 360);
+    ui_label_create(status_card, ip_line, UI_COLOR_MUTED, UI_THEME_CARD_INNER_WIDTH);
 
     char saved_line[64];
     snprintf(saved_line, sizeof(saved_line), "Saved networks: %d", state->saved_count);
-    ui_label_create(status_card, saved_line, UI_COLOR_DIM, 360);
+    ui_label_create(status_card, saved_line, UI_COLOR_DIM, UI_THEME_CARD_INNER_WIDTH);
 
     if (state->portal_active) {
         lv_obj_t *portal_card = ui_card_create(content);
-        ui_label_create(portal_card, "Setup portal active", UI_COLOR_SUCCESS_TEXT, 360);
-        ui_label_create(portal_card, "Wi-Fi: LookAI-Setup", UI_COLOR_MUTED, 360);
-        ui_label_create(portal_card, "Password: 12345678", UI_COLOR_MUTED, 360);
-        ui_label_create(portal_card, "IP: 192.168.4.1", UI_COLOR_MUTED, 360);
+        ui_label_create(portal_card, "Setup portal active", UI_COLOR_SUCCESS_TEXT, UI_THEME_CARD_INNER_WIDTH);
+        ui_label_create(portal_card, "Wi-Fi: LookAI-Setup", UI_COLOR_MUTED, UI_THEME_CARD_INNER_WIDTH);
+        ui_label_create(portal_card, "Password: 12345678", UI_COLOR_MUTED, UI_THEME_CARD_INNER_WIDTH);
+        ui_label_create(portal_card, "IP: 192.168.4.1", UI_COLOR_MUTED, UI_THEME_CARD_INNER_WIDTH);
     }
 
     ui_button_create(
         content,
         "Manage saved networks",
         UI_THEME_BUTTON_WIDTH,
-        56,
+        UI_THEME_BUTTON_HEIGHT,
         UI_COLOR_SECONDARY,
         manage_saved_cb,
         NULL
@@ -80,7 +80,7 @@ void wifi_settings_screen_render(
         content,
         state->portal_active ? "Close captive portal" : "Connect another network",
         UI_THEME_BUTTON_WIDTH,
-        56,
+        UI_THEME_BUTTON_HEIGHT,
         state->portal_active ? UI_COLOR_DANGER : UI_COLOR_PRIMARY,
         portal_toggle_cb,
         NULL
