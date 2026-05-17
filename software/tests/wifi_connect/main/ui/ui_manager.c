@@ -1,6 +1,6 @@
 /**
  * @file ui/ui_manager.c
- * @brief LVGL UI coordinator and menu routing implementation.
+ * @brief LVGL UI coordinator and scaffold-based menu routing implementation.
  */
 
 #include "ui_manager.h"
@@ -15,7 +15,7 @@
 #include "manage_networks_screen.h"
 #include "menu_controller.h"
 #include "settings_screen.h"
-#include "ui_screen.h"
+#include "ui_scaffold.h"
 #include "wifi_settings_screen.h"
 
 static const char *TAG = "ui_manager";
@@ -42,6 +42,24 @@ static lv_obj_t *get_active_screen(void)
 #else
     return lv_scr_act();
 #endif
+}
+
+/**
+ * @brief Return the current menu title.
+ */
+static const char *get_current_title(void)
+{
+    switch (menu_controller_current(&s_menu)) {
+        case MENU_SCREEN_WIFI:
+            return "Wi-Fi";
+
+        case MENU_SCREEN_SAVED_NETWORKS:
+            return "Saved Wi-Fi";
+
+        case MENU_SCREEN_SETTINGS:
+        default:
+            return "Settings";
+    }
 }
 
 /**
@@ -164,34 +182,36 @@ static void render_current_unlocked(void)
 {
     lv_obj_t *screen = get_active_screen();
 
-    ui_screen_prepare(screen);
+    ui_scaffold_config_t scaffold_config = {
+        .title = get_current_title(),
+        .show_back = menu_controller_can_go_back(&s_menu),
+        .back_cb = back_event_cb,
+    };
+
+    lv_obj_t *body = ui_scaffold_create(screen, &scaffold_config);
 
     menu_screen_t screen_id = menu_controller_current(&s_menu);
 
     if (screen_id == MENU_SCREEN_SETTINGS) {
         settings_screen_render(
-            screen,
+            body,
             &s_state,
             &s_callbacks,
             wifi_button_event_cb
         );
     } else if (screen_id == MENU_SCREEN_WIFI) {
         wifi_settings_screen_render(
-            screen,
+            body,
             &s_state,
             &s_callbacks,
-            menu_controller_can_go_back(&s_menu),
-            back_event_cb,
             manage_saved_event_cb,
             portal_toggle_event_cb
         );
     } else {
         manage_networks_screen_render(
-            screen,
+            body,
             &s_state,
             &s_callbacks,
-            menu_controller_can_go_back(&s_menu),
-            back_event_cb,
             connect_saved_event_cb,
             forget_network_event_cb,
             portal_toggle_event_cb

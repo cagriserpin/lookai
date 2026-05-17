@@ -19,7 +19,8 @@ idf_component_register(
         "ui/items/ui_button.c"
         "ui/items/ui_card.c"
         "ui/items/ui_label.c"
-        "ui/items/ui_screen.c"
+
+        "ui/scaffold/ui_scaffold.c"
 
         "ui/menus/settings/settings_screen.c"
         "ui/menus/settings/wifi_settings_screen.c"
@@ -32,6 +33,7 @@ idf_component_register(
         "ui"
         "ui/navigation"
         "ui/items"
+        "ui/scaffold"
         "ui/menus/settings"
     REQUIRES
         esp_wifi

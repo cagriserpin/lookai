@@ -1,6 +1,6 @@
 /**
  * @file ui/ui_theme.h
- * @brief Shared LVGL UI theme constants tuned for a circular display.
+ * @brief Shared LVGL UI theme constants for circular scaffold layout.
  */
 
 #pragma once
@@ -18,58 +18,42 @@
 #define UI_THEME_SCREEN_HEIGHT 466
 
 /**
- * @brief App bar height.
+ * @brief Thickness of each outer slice around the central body.
  *
- * The app bar intentionally stays inside the circular safe area and uses a
- * transparent background.
+ * With a 466x466 display and 318x318 body, each slice is 74 px thick:
+ * (466 - 318) / 2 = 74.
  */
-#define UI_THEME_APPBAR_HEIGHT 64
+#define UI_THEME_SLICE_SIZE 74
 
 /**
- * @brief Circular-safe AppBar width.
- *
- * The AppBar is intentionally narrower than the body because it sits near the
- * top of the round display where horizontal safe area is smaller.
+ * @brief Width of the central UI body rectangle.
  */
-#define UI_THEME_APPBAR_WIDTH 286
+#define UI_THEME_BODY_WIDTH 318
 
 /**
- * @brief App bar Y offset.
+ * @brief Height of the central UI body rectangle.
  */
-#define UI_THEME_APPBAR_Y 18
+#define UI_THEME_BODY_HEIGHT 318
 
 /**
- * @brief Scrollable content width.
- *
- * This is narrower than the physical display because the panel is circular.
- * Wider content clips near the top/bottom of the circle.
+ * @brief Width of the top-slice title label.
  */
-#define UI_THEME_CONTENT_WIDTH 354
+#define UI_THEME_TITLE_WIDTH 248
 
 /**
- * @brief Scrollable content height.
+ * @brief Card width inside the central UI body.
  */
-#define UI_THEME_CONTENT_HEIGHT 330
-
-/**
- * @brief Scrollable content Y offset.
- */
-#define UI_THEME_CONTENT_Y 88
-
-/**
- * @brief Card width inside circular safe area.
- */
-#define UI_THEME_CARD_WIDTH 330
+#define UI_THEME_CARD_WIDTH 300
 
 /**
  * @brief Inner content width inside cards.
  */
-#define UI_THEME_CARD_INNER_WIDTH 292
+#define UI_THEME_CARD_INNER_WIDTH 268
 
 /**
  * @brief Default full-width button width.
  */
-#define UI_THEME_BUTTON_WIDTH 330
+#define UI_THEME_BUTTON_WIDTH 300
 
 /**
  * @brief Default button height.

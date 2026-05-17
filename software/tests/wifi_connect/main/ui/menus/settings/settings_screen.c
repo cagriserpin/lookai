@@ -1,6 +1,6 @@
 /**
  * @file ui/menus/settings/settings_screen.c
- * @brief Root settings menu screen implementation.
+ * @brief Root settings menu body implementation.
  */
 
 #include "settings_screen.h"
@@ -10,11 +10,10 @@
 #include "ui_button.h"
 #include "ui_card.h"
 #include "ui_label.h"
-#include "ui_screen.h"
 #include "ui_theme.h"
 
 void settings_screen_render(
-    lv_obj_t *screen,
+    lv_obj_t *body,
     const ui_manager_state_t *state,
     const ui_manager_callbacks_t *callbacks,
     lv_event_cb_t wifi_button_cb
@@ -22,11 +21,7 @@ void settings_screen_render(
 {
     (void)callbacks;
 
-    ui_screen_create_header(screen, "Settings", false, NULL);
-
-    lv_obj_t *content = ui_screen_create_content(screen);
-
-    lv_obj_t *card = ui_card_create(content);
+    lv_obj_t *card = ui_card_create(body);
     ui_label_create(card, "Wi-Fi", UI_COLOR_TEXT, UI_THEME_CARD_INNER_WIDTH);
 
     char status_line[96];
@@ -45,7 +40,7 @@ void settings_screen_render(
     }
 
     ui_button_create(
-        content,
+        body,
         "Open Wi-Fi settings",
         UI_THEME_BUTTON_WIDTH,
         UI_THEME_BUTTON_HEIGHT,
