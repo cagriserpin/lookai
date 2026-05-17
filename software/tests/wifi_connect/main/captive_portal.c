@@ -1,3 +1,8 @@
+/**
+ * @file captive_portal.c
+ * @brief HTTP captive portal implementation for adding/switching Wi-Fi networks.
+ */
+
 #include "captive_portal.h"
 
 #include <ctype.h>

@@ -1,3 +1,8 @@
+/**
+ * @file wifi_storage.c
+ * @brief NVS-backed multiple saved Wi-Fi credential storage implementation.
+ */
+
 #include "wifi_storage.h"
 
 #include <stdio.h>

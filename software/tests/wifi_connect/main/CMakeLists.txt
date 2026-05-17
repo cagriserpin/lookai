@@ -1,12 +1,14 @@
 idf_component_register(
     SRCS
         "main.c"
-        "ui_status.c"
+        "app_controller.c"
+        "wifi_manager.c"
+        "ui_manager.c"
+        "menu_controller.c"
         "wifi_ap.c"
+        "wifi_storage.c"
         "captive_portal.c"
         "dns_server.c"
-        "wifi_storage.c"
-        "menu_controller.c"
     INCLUDE_DIRS
         "."
     REQUIRES

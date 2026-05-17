@@ -1,3 +1,8 @@
+/**
+ * @file wifi_ap.c
+ * @brief Low-level ESP-IDF Wi-Fi AP/STA wrapper implementation.
+ */
+
 #include "wifi_ap.h"
 
 #include <stdio.h>

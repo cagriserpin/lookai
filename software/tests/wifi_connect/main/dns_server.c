@@ -1,3 +1,8 @@
+/**
+ * @file dns_server.c
+ * @brief Small DNS redirect server implementation used by captive portal mode.
+ */
+
 #include "dns_server.h"
 
 #include <stdbool.h>

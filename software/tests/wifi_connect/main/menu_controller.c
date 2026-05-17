@@ -1,3 +1,8 @@
+/**
+ * @file menu_controller.c
+ * @brief Stack-based menu navigation controller implementation.
+ */
+
 #include "menu_controller.h"
 
 #include <string.h>
