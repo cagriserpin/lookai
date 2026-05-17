@@ -247,6 +247,7 @@ static void create_left_slice(lv_obj_t *screen, const ui_scaffold_config_t *conf
 
     lv_obj_t *icon = lv_label_create(back_hitbox);
     lv_label_set_text(icon, LV_SYMBOL_LEFT);
+    lv_obj_set_style_text_font(icon, &lv_font_montserrat_18, 0);
     lv_obj_set_style_text_color(icon, lv_color_hex(UI_COLOR_TEXT), 0);
     lv_obj_center(icon);
 }
