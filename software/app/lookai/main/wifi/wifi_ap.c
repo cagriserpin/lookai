@@ -26,7 +26,7 @@ static const char *TAG = "wifi_ap";
 #define WIFI_AP_MAX_CONN  4
 
 #define WIFI_STA_MAX_RETRY 5
-#define WIFI_SCAN_TASK_STACK_SIZE 8192
+#define WIFI_SCAN_TASK_STACK_SIZE 6144
 
 static esp_netif_t *s_ap_netif = NULL;
 static esp_netif_t *s_sta_netif = NULL;
@@ -235,8 +235,14 @@ esp_err_t wifi_ap_start(void)
     ESP_LOGI(TAG, "Password: %s", WIFI_AP_PASSWORD);
     ESP_LOGI(TAG, "IP: %s", wifi_ap_get_ip());
 
-    wifi_ap_scan_refresh_async();
-
+    /*
+     * Do not start a scan immediately when APSTA setup mode starts.
+     *
+     * Starting SoftAP + HTTP server + DNS + Wi-Fi scan + LVGL redraw at the
+     * same moment can exhaust internal DMA-capable memory. The portal can use
+     * the existing scan cache, and the web UI can still trigger a fresh scan
+     * through /refresh.
+     */
     return ESP_OK;
 }
 

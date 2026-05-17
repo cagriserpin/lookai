@@ -17,6 +17,7 @@
 #include "menu_controller.h"
 #include "settings_screen.h"
 #include "ui_scaffold.h"
+#include "ui_theme.h"
 #include "wifi_settings_screen.h"
 
 static const char *TAG = "ui_manager";
@@ -215,6 +216,23 @@ static void forget_network_event_cb(lv_event_t *event)
     }
 }
 
+static void append_body_scroll_spacer(lv_obj_t *body)
+{
+    /*
+     * LVGL bottom padding on a scrollable flex container is not always enough
+     * to create a comfortable scroll tail. A real invisible child guarantees
+     * that the last UI element can scroll above the round screen's bottom edge.
+     */
+    lv_obj_t *spacer = lv_obj_create(body);
+
+    lv_obj_set_size(spacer, 1, UI_THEME_BODY_BOTTOM_SCROLL_PADDING);
+    lv_obj_set_style_bg_opa(spacer, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(spacer, 0, 0);
+    lv_obj_set_style_pad_all(spacer, 0, 0);
+    lv_obj_clear_flag(spacer, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(spacer, LV_OBJ_FLAG_CLICKABLE);
+}
+
 static void render_body_unlocked(lv_obj_t *body)
 {
     if (body == NULL) {
@@ -255,6 +273,8 @@ static void render_body_unlocked(lv_obj_t *body)
             portal_toggle_event_cb
         );
     }
+
+    append_body_scroll_spacer(body);
 }
 
 static void render_current_unlocked(void)

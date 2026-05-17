@@ -474,7 +474,9 @@ esp_err_t captive_portal_start(captive_portal_connect_cb_t connect_cb)
     config.max_uri_handlers = 16;
 
     config.lru_purge_enable = true;
-    config.max_open_sockets = 7;
+    /* Keep socket count low to preserve internal/DMA-capable memory for the display SPI path. */
+    config.max_open_sockets = 3;
+    config.stack_size = 4096;
     config.recv_wait_timeout = 3;
     config.send_wait_timeout = 3;
 

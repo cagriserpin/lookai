@@ -11,7 +11,12 @@
 #include "ui_label.h"
 #include "ui_theme.h"
 
-#define BRIGHTNESS_CARD_HORIZONTAL_PADDING 38
+#define BRIGHTNESS_SLIDER_KNOB_SIZE 38
+#define BRIGHTNESS_SLIDER_EXT_CLICK_AREA 50
+
+#define BRIGHTNESS_CARD_HORIZONTAL_PADDING 50
+#define BRIGHTNESS_CARD_TOP_PADDING 18
+#define BRIGHTNESS_CARD_BOTTOM_PADDING 34
 #define BRIGHTNESS_CARD_VERTICAL_PADDING 18
 #define BRIGHTNESS_CARD_INNER_WIDTH (UI_THEME_CARD_WIDTH - (BRIGHTNESS_CARD_HORIZONTAL_PADDING * 2))
 
@@ -30,7 +35,7 @@ void brightness_screen_render(
     lv_obj_set_style_pad_left(card, BRIGHTNESS_CARD_HORIZONTAL_PADDING, 0);
     lv_obj_set_style_pad_right(card, BRIGHTNESS_CARD_HORIZONTAL_PADDING, 0);
     lv_obj_set_style_pad_top(card, BRIGHTNESS_CARD_VERTICAL_PADDING, 0);
-    lv_obj_set_style_pad_bottom(card, BRIGHTNESS_CARD_VERTICAL_PADDING, 0);
+    lv_obj_set_style_pad_bottom(card, BRIGHTNESS_CARD_BOTTOM_PADDING, 0);
     lv_obj_set_style_pad_gap(card, 18, 0);
 
     ui_label_create(card, "Brightness", UI_COLOR_TEXT, BRIGHTNESS_CARD_INNER_WIDTH);
@@ -63,6 +68,14 @@ void brightness_screen_render(
     lv_obj_set_style_bg_color(slider, lv_color_hex(UI_COLOR_TEXT), LV_PART_KNOB);
     lv_obj_set_style_border_color(slider, lv_color_hex(UI_COLOR_BRIGHTNESS_ORANGE), LV_PART_KNOB);
     lv_obj_set_style_border_width(slider, 2, LV_PART_KNOB);
+
+    /*
+     * The visible knob is larger than the slider track. At the min/max edges,
+     * part of the knob is outside the slider object's normal hit box. Extending
+     * the click area lets the whole visible knob start a drag, especially near
+     * 95-100%.
+     */
+    lv_obj_set_ext_click_area(slider, BRIGHTNESS_SLIDER_EXT_CLICK_AREA);
 
     if (slider_changed_cb != NULL) {
         lv_obj_add_event_cb(slider, slider_changed_cb, LV_EVENT_VALUE_CHANGED, value_label);

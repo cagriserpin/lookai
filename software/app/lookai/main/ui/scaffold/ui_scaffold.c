@@ -336,6 +336,7 @@ static lv_obj_t *create_body(lv_obj_t *screen, bool show_bottom_slice)
     lv_obj_set_style_bg_opa(body, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(body, 0, 0);
     lv_obj_set_style_pad_all(body, 8, 0);
+    lv_obj_set_style_pad_right(body, UI_THEME_BODY_RIGHT_SCROLL_PADDING, 0);
     lv_obj_set_style_pad_gap(body, 12, 0);
     lv_obj_set_scroll_dir(body, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_AUTO);

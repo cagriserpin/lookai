@@ -47,6 +47,7 @@ static bool s_pending_credentials_valid = false;
 static bool s_setup_portal_active = false;
 static bool s_auto_connect_attempt = false;
 static bool s_reconnect_mode = false;
+static bool s_manual_setup_requested = false;
 
 static TaskHandle_t s_close_setup_task_handle = NULL;
 static TaskHandle_t s_reconnect_task_handle = NULL;
@@ -213,6 +214,7 @@ static void close_setup_portal_task(void *arg)
         wifi_ap_stop_setup_ap();
 
         s_setup_portal_active = false;
+        s_manual_setup_requested = false;
     }
 
     if (wifi_ap_is_sta_connected()) {
@@ -253,10 +255,26 @@ static void connect_another_network_task(void *arg)
 {
     ESP_LOGI(TAG, "Connect another network requested from device UI");
 
+    /*
+     * This prevents a race where the boot-time saved-network scan/connect flow
+     * continues while the setup portal is being opened. That race can make Wi-Fi
+     * mode changes, scans, and LVGL display flushes happen at the same time and
+     * exhaust DMA/internal buffers.
+     */
+    s_manual_setup_requested = true;
     s_pending_credentials_valid = false;
     s_auto_connect_attempt = false;
+    s_reconnect_mode = false;
 
     update_wifi_status("Opening setup portal");
+
+    /*
+     * If the boot task is in the middle of a blocking scan, wait for it to
+     * observe s_manual_setup_requested and exit before switching to APSTA mode.
+     */
+    for (int i = 0; i < 80 && s_boot_wifi_task_handle != NULL; i++) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
 
     esp_err_t err = start_setup_portal_sync();
     if (err != ESP_OK) {
@@ -275,6 +293,8 @@ static void connect_another_network_task(void *arg)
 
 static void on_connect_another_pressed(void)
 {
+    s_manual_setup_requested = true;
+
     if (s_connect_another_task_handle != NULL) {
         return;
     }
@@ -368,6 +388,11 @@ static void reconnect_task(void *arg)
     ESP_LOGI(TAG, "Reconnect task started");
 
     while (!wifi_ap_is_sta_connected()) {
+        if (s_manual_setup_requested) {
+            ESP_LOGI(TAG, "Reconnect task stopped because setup portal was requested");
+            break;
+        }
+
         if (s_setup_portal_active) {
             vTaskDelay(pdMS_TO_TICKS(RECONNECT_INTERVAL_MS));
             continue;
@@ -481,6 +506,7 @@ static void handle_wifi_event(wifi_ap_event_t event)
     if (event == WIFI_AP_EVENT_STA_CONNECTED) {
         s_auto_connect_attempt = false;
         s_reconnect_mode = false;
+        s_manual_setup_requested = false;
 
         save_pending_credentials_if_needed();
         update_wifi_status("Connected");
@@ -646,6 +672,11 @@ static esp_err_t start_setup_portal_sync(void)
 
 static bool try_saved_wifi_on_boot(void)
 {
+    if (s_manual_setup_requested) {
+        ESP_LOGI(TAG, "Skipping boot auto-connect because setup portal was requested");
+        return false;
+    }
+
     if (!wifi_storage_has_any()) {
         ESP_LOGI(TAG, "No saved Wi-Fi credentials found");
         update_wifi_status("No saved Wi-Fi");
@@ -660,11 +691,21 @@ static bool try_saved_wifi_on_boot(void)
         return false;
     }
 
+    if (s_manual_setup_requested) {
+        ESP_LOGI(TAG, "Setup portal requested while STA mode was starting");
+        return false;
+    }
+
     char ssid[33] = {0};
     char password[65] = {0};
 
     if (!find_best_saved_network(ssid, sizeof(ssid), password, sizeof(password))) {
         update_wifi_status("Saved Wi-Fi not found");
+        return false;
+    }
+
+    if (s_manual_setup_requested) {
+        ESP_LOGI(TAG, "Setup portal requested while scanning saved networks; skipping saved Wi-Fi connect");
         return false;
     }
 
@@ -688,7 +729,9 @@ static bool try_saved_wifi_on_boot(void)
 
 static void boot_wifi_task(void *arg)
 {
-    if (!try_saved_wifi_on_boot()) {
+    bool saved_connect_started = try_saved_wifi_on_boot();
+
+    if (!saved_connect_started && !s_manual_setup_requested && !s_setup_portal_active) {
         start_setup_portal_sync();
     }
 
@@ -729,6 +772,7 @@ void wifi_manager_close_setup_portal(void)
     wifi_ap_stop_setup_ap();
 
     s_setup_portal_active = false;
+    s_manual_setup_requested = false;
 
     update_wifi_status(wifi_ap_is_sta_connected() ? "Connected" : "Setup portal closed");
 }
