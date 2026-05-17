@@ -7,6 +7,7 @@
 
 #include <stdlib.h>
 
+#include "ui_icons.h"
 #include "ui_theme.h"
 
 /*
@@ -20,6 +21,14 @@
 
 #ifndef UI_BACK_ICON_FONT
 #define UI_BACK_ICON_FONT (&lv_font_montserrat_18)
+#endif
+
+#ifndef UI_TITLE_ICON_FONT
+#define UI_TITLE_ICON_FONT (&lv_font_montserrat_18)
+#endif
+
+#ifndef UI_TITLE_CUSTOM_ICON_FONT
+#define UI_TITLE_CUSTOM_ICON_FONT (&lookai_symbols)
 #endif
 
 #define UI_TITLE_SCROLL_EDGE_PADDING 20
@@ -155,6 +164,46 @@ static lv_obj_t *create_region(lv_obj_t *screen, int width, int height)
     return region;
 }
 
+static void create_title_icon(lv_obj_t *top, ui_scaffold_title_icon_t title_icon)
+{
+    if (title_icon == UI_SCAFFOLD_TITLE_ICON_NONE) {
+        return;
+    }
+
+    const char *icon_text = "";
+    const lv_font_t *icon_font = UI_TITLE_ICON_FONT;
+
+    switch (title_icon) {
+        case UI_SCAFFOLD_TITLE_ICON_SETTINGS:
+            icon_text = LV_SYMBOL_SETTINGS;
+            break;
+
+        case UI_SCAFFOLD_TITLE_ICON_WIFI:
+            icon_text = LV_SYMBOL_WIFI;
+            break;
+
+        case UI_SCAFFOLD_TITLE_ICON_BRIGHTNESS:
+            icon_text = UI_SYMBOL_SUN;
+            icon_font = UI_TITLE_CUSTOM_ICON_FONT;
+            break;
+
+        case UI_SCAFFOLD_TITLE_ICON_NONE:
+        default:
+            return;
+    }
+
+    lv_obj_t *icon = lv_label_create(top);
+    lv_label_set_text(icon, icon_text);
+    lv_obj_set_style_text_font(icon, icon_font, 0);
+    lv_obj_set_style_text_color(icon, lv_color_hex(UI_COLOR_TEXT), 0);
+
+    /*
+     * Icon lives at the very top of the top slice. The title text keeps its
+     * existing center position.
+     */
+    lv_obj_align(icon, LV_ALIGN_TOP_MID, 0, 2);
+}
+
 static void create_scrolling_title(lv_obj_t *top, const char *title_text)
 {
     lv_obj_t *viewport = lv_obj_create(top);
@@ -215,6 +264,11 @@ static void create_top_slice(lv_obj_t *screen, const ui_scaffold_config_t *confi
     lv_obj_t *top = create_region(screen, UI_THEME_BODY_WIDTH, UI_THEME_SLICE_SIZE);
 
     lv_obj_align(top, LV_ALIGN_TOP_MID, 0, 0);
+
+    create_title_icon(
+        top,
+        config != NULL ? config->title_icon : UI_SCAFFOLD_TITLE_ICON_NONE
+    );
 
     create_scrolling_title(
         top,
@@ -282,8 +336,6 @@ static lv_obj_t *create_body(lv_obj_t *screen, bool show_bottom_slice)
     lv_obj_set_style_bg_opa(body, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(body, 0, 0);
     lv_obj_set_style_pad_all(body, 8, 0);
-    lv_obj_set_style_pad_right(body, UI_THEME_BODY_RIGHT_SCROLL_PADDING, 0);
-    lv_obj_set_style_pad_bottom(body, UI_THEME_BODY_BOTTOM_SCROLL_PADDING, 0);
     lv_obj_set_style_pad_gap(body, 12, 0);
     lv_obj_set_scroll_dir(body, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_AUTO);

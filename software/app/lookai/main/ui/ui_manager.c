@@ -70,6 +70,22 @@ static const char *get_current_title(void)
     }
 }
 
+static ui_scaffold_title_icon_t get_current_title_icon(void)
+{
+    switch (menu_controller_current(&s_menu)) {
+        case MENU_SCREEN_WIFI:
+        case MENU_SCREEN_SAVED_NETWORKS:
+            return UI_SCAFFOLD_TITLE_ICON_WIFI;
+
+        case MENU_SCREEN_BRIGHTNESS:
+            return UI_SCAFFOLD_TITLE_ICON_BRIGHTNESS;
+
+        case MENU_SCREEN_SETTINGS:
+        default:
+            return UI_SCAFFOLD_TITLE_ICON_SETTINGS;
+    }
+}
+
 static void render_current_unlocked(void);
 
 static void menu_changed_cb(menu_screen_t screen, void *user_ctx)
@@ -247,6 +263,7 @@ static void render_current_unlocked(void)
 
     ui_scaffold_config_t scaffold_config = {
         .title = get_current_title(),
+        .title_icon = get_current_title_icon(),
         .show_back = menu_controller_can_go_back(&s_menu),
         .show_bottom_slice = false,
         .back_cb = back_event_cb,
