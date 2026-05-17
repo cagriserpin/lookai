@@ -23,6 +23,15 @@ static const char *TAG = "ui_manager";
 static menu_controller_t s_menu;
 static ui_manager_callbacks_t s_callbacks = {0};
 
+/**
+ * @brief Current scaffold body object.
+ *
+ * The scaffold/title/back slices are recreated only on navigation. Normal UI
+ * data updates clean and repaint this body object, which keeps the title
+ * animation alive.
+ */
+static lv_obj_t *s_body = NULL;
+
 static ui_manager_state_t s_state = {
     .wifi_status = "Starting",
     .wifi_ssid = "",
@@ -54,7 +63,7 @@ static const char *get_current_title(void)
             return "Wi-Fi";
 
         case MENU_SCREEN_SAVED_NETWORKS:
-            return "Saved Wi-Fi";
+            return "Saved Wi-Fi Networks Scroll Animation Demo";
 
         case MENU_SCREEN_SETTINGS:
         default:
@@ -176,19 +185,17 @@ static void forget_network_event_cb(lv_event_t *event)
 }
 
 /**
- * @brief Render current screen under an already-held display lock.
+ * @brief Render only the current screen body into an existing body object.
+ *
+ * This intentionally does not recreate the scaffold, title, or back button.
+ * Keeping the title object alive prevents title scroll animations from
+ * restarting when Wi-Fi status or saved-network data changes.
  */
-static void render_current_unlocked(void)
+static void render_body_unlocked(lv_obj_t *body)
 {
-    lv_obj_t *screen = get_active_screen();
-
-    ui_scaffold_config_t scaffold_config = {
-        .title = get_current_title(),
-        .show_back = menu_controller_can_go_back(&s_menu),
-        .back_cb = back_event_cb,
-    };
-
-    lv_obj_t *body = ui_scaffold_create(screen, &scaffold_config);
+    if (body == NULL) {
+        return;
+    }
 
     menu_screen_t screen_id = menu_controller_current(&s_menu);
 
@@ -220,6 +227,28 @@ static void render_current_unlocked(void)
 }
 
 /**
+ * @brief Render current screen under an already-held display lock.
+ *
+ * This is a full scaffold render and should be used for navigation changes
+ * where title/back visibility may change.
+ */
+static void render_current_unlocked(void)
+{
+    lv_obj_t *screen = get_active_screen();
+
+    ui_scaffold_config_t scaffold_config = {
+        .title = get_current_title(),
+        .show_back = menu_controller_can_go_back(&s_menu),
+        .back_cb = back_event_cb,
+    };
+
+    s_body = NULL;
+    s_body = ui_scaffold_create(screen, &scaffold_config);
+
+    render_body_unlocked(s_body);
+}
+
+/**
  * @brief Render current screen while taking the display lock.
  */
 static void render_current_locked(void)
@@ -229,6 +258,30 @@ static void render_current_locked(void)
     }
 
     render_current_unlocked();
+
+    bsp_display_unlock();
+}
+
+/**
+ * @brief Re-render only the current body while taking the display lock.
+ *
+ * This keeps the scaffold and title animation untouched. If the body has not
+ * been created yet, it falls back to a full render.
+ */
+static void render_body_only_locked(void)
+{
+    if (bsp_display_lock(1000) != ESP_OK) {
+        return;
+    }
+
+    if (s_body == NULL) {
+        render_current_unlocked();
+        bsp_display_unlock();
+        return;
+    }
+
+    lv_obj_clean(s_body);
+    render_body_unlocked(s_body);
 
     bsp_display_unlock();
 }
@@ -302,25 +355,66 @@ void ui_manager_update_wifi_status(
     bool portal_active
 )
 {
-    if (status != NULL) {
+    bool status_changed = false;
+    bool ssid_changed = false;
+    bool ip_changed = false;
+    bool saved_count_changed = false;
+    bool portal_changed = false;
+
+    if (status != NULL && strcmp(s_state.wifi_status, status) != 0) {
         strncpy(s_state.wifi_status, status, sizeof(s_state.wifi_status) - 1);
         s_state.wifi_status[sizeof(s_state.wifi_status) - 1] = '\0';
+        status_changed = true;
     }
 
-    if (ssid != NULL) {
+    if (ssid != NULL && strcmp(s_state.wifi_ssid, ssid) != 0) {
         strncpy(s_state.wifi_ssid, ssid, sizeof(s_state.wifi_ssid) - 1);
         s_state.wifi_ssid[sizeof(s_state.wifi_ssid) - 1] = '\0';
+        ssid_changed = true;
     }
 
-    if (ip != NULL) {
+    if (ip != NULL && strcmp(s_state.wifi_ip, ip) != 0) {
         strncpy(s_state.wifi_ip, ip, sizeof(s_state.wifi_ip) - 1);
         s_state.wifi_ip[sizeof(s_state.wifi_ip) - 1] = '\0';
+        ip_changed = true;
     }
 
-    s_state.saved_count = saved_count;
-    s_state.portal_active = portal_active;
+    if (s_state.saved_count != saved_count) {
+        s_state.saved_count = saved_count;
+        saved_count_changed = true;
+    }
 
-    render_current_locked();
+    if (s_state.portal_active != portal_active) {
+        s_state.portal_active = portal_active;
+        portal_changed = true;
+    }
+
+    bool changed =
+        status_changed ||
+        ssid_changed ||
+        ip_changed ||
+        saved_count_changed ||
+        portal_changed;
+
+    if (!changed) {
+        return;
+    }
+
+    /*
+     * Avoid unnecessary redraws. Recreating the scaffold restarts title
+     * animations. The saved-networks screen does not show status/SSID/IP text,
+     * so only portal changes require redraw there.
+     */
+    menu_screen_t current = menu_controller_current(&s_menu);
+    bool should_render = true;
+
+    if (current == MENU_SCREEN_SAVED_NETWORKS) {
+        should_render = portal_changed;
+    }
+
+    if (should_render) {
+        render_body_only_locked();
+    }
 }
 
 void ui_manager_set_saved_networks(
@@ -334,6 +428,24 @@ void ui_manager_set_saved_networks(
 
     if (count > UI_MANAGER_MAX_SAVED_NETWORKS) {
         count = UI_MANAGER_MAX_SAVED_NETWORKS;
+    }
+
+    bool changed = s_state.saved_items_count != count;
+
+    if (!changed) {
+        for (int i = 0; i < count; i++) {
+            if (
+                strcmp(s_state.saved_items[i].ssid, items[i].ssid) != 0 ||
+                s_state.saved_items[i].connected != items[i].connected
+            ) {
+                changed = true;
+                break;
+            }
+        }
+    }
+
+    if (!changed) {
+        return;
     }
 
     memset(s_state.saved_items, 0, sizeof(s_state.saved_items));
@@ -350,5 +462,5 @@ void ui_manager_set_saved_networks(
         s_state.saved_items[i].connected = items[i].connected;
     }
 
-    render_current_locked();
+    render_body_only_locked();
 }

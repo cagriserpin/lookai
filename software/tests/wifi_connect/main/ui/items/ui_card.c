@@ -22,5 +22,12 @@ lv_obj_t *ui_card_create(lv_obj_t *parent)
     lv_obj_set_style_pad_gap(card, 10, 0);
     lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
 
+    /*
+     * Cards should never show their own scrollbars. Text should wrap or scroll
+     * inside individual child labels instead.
+     */
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollbar_mode(card, LV_SCROLLBAR_MODE_OFF);
+
     return card;
 }
