@@ -1,5 +1,5 @@
 /**
- * @file dns_server.c
+ * @file portal/dns_server.c
  * @brief Small DNS redirect server implementation used by captive portal mode.
  */
 

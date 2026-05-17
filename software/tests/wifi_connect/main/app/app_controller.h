@@ -1,5 +1,5 @@
 /**
- * @file app_controller.h
+ * @file app/app_controller.h
  * @brief Top-level application controller API.
  */
 

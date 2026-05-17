@@ -1,5 +1,5 @@
 /**
- * @file menu_controller.c
+ * @file ui/navigation/menu_controller.c
  * @brief Stack-based menu navigation controller implementation.
  */
 

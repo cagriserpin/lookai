@@ -1,5 +1,5 @@
 /**
- * @file ui_manager.h
+ * @file ui/ui_manager.h
  * @brief LVGL settings and Wi-Fi management UI API.
  */
 
@@ -38,6 +38,19 @@ typedef struct {
     char ssid[33];   /**< Saved SSID. */
     bool connected;  /**< True if this SSID is currently connected. */
 } ui_manager_saved_network_t;
+
+/**
+ * @brief Mutable UI state used by screen renderers.
+ */
+typedef struct {
+    char wifi_status[64];                                                /**< Human-readable Wi-Fi state. */
+    char wifi_ssid[33];                                                  /**< Current or target SSID. */
+    char wifi_ip[16];                                                    /**< Current IPv4 address. */
+    int saved_count;                                                     /**< Saved network count. */
+    bool portal_active;                                                  /**< True when setup portal is active. */
+    ui_manager_saved_network_t saved_items[UI_MANAGER_MAX_SAVED_NETWORKS];/**< Saved networks shown in UI. */
+    int saved_items_count;                                               /**< Number of saved items. */
+} ui_manager_state_t;
 
 /**
  * @brief Initialize the LVGL UI.

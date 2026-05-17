@@ -1,5 +1,5 @@
 /**
- * @file menu_controller.h
+ * @file ui/navigation/menu_controller.h
  * @brief Small stack-based menu navigation controller.
  */
 

@@ -1,5 +1,5 @@
 /**
- * @file wifi_manager.h
+ * @file wifi/wifi_manager.h
  * @brief Application-level Wi-Fi manager API.
  */
 

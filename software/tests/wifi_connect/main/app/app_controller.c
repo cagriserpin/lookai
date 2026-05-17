@@ -1,5 +1,5 @@
 /**
- * @file app_controller.c
+ * @file app/app_controller.c
  * @brief Top-level application initialization and module wiring.
  */
 

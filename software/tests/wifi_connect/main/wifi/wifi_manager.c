@@ -1,5 +1,5 @@
 /**
- * @file wifi_manager.c
+ * @file wifi/wifi_manager.c
  * @brief Application-level Wi-Fi state machine and setup portal orchestration.
  */
 

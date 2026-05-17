@@ -1,5 +1,5 @@
 /**
- * @file captive_portal.c
+ * @file portal/captive_portal.c
  * @brief HTTP captive portal implementation for adding/switching Wi-Fi networks.
  */
 

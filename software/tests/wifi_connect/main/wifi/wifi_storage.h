@@ -1,5 +1,5 @@
 /**
- * @file wifi_storage.h
+ * @file wifi/wifi_storage.h
  * @brief NVS-backed multiple saved Wi-Fi credential storage API.
  */
 

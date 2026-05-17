@@ -1,16 +1,38 @@
 idf_component_register(
     SRCS
         "main.c"
-        "app_controller.c"
-        "wifi_manager.c"
-        "ui_manager.c"
-        "menu_controller.c"
-        "wifi_ap.c"
-        "wifi_storage.c"
-        "captive_portal.c"
-        "dns_server.c"
+
+        "app/app_controller.c"
+
+        "wifi/wifi_manager.c"
+        "wifi/wifi_ap.c"
+        "wifi/wifi_storage.c"
+
+        "portal/captive_portal.c"
+        "portal/dns_server.c"
+
+        "ui/ui_manager.c"
+        "ui/ui_theme.c"
+
+        "ui/navigation/menu_controller.c"
+
+        "ui/items/ui_button.c"
+        "ui/items/ui_card.c"
+        "ui/items/ui_label.c"
+        "ui/items/ui_screen.c"
+
+        "ui/menus/settings/settings_screen.c"
+        "ui/menus/settings/wifi_settings_screen.c"
+        "ui/menus/settings/manage_networks_screen.c"
     INCLUDE_DIRS
         "."
+        "app"
+        "wifi"
+        "portal"
+        "ui"
+        "ui/navigation"
+        "ui/items"
+        "ui/menus/settings"
     REQUIRES
         esp_wifi
         esp_event

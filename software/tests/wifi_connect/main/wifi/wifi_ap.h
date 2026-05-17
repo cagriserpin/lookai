@@ -1,5 +1,5 @@
 /**
- * @file wifi_ap.h
+ * @file wifi/wifi_ap.h
  * @brief Low-level ESP-IDF Wi-Fi AP/STA wrapper API.
  */
 
