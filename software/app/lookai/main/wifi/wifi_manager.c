@@ -472,7 +472,7 @@ static void on_wifi_ap_event(wifi_ap_event_t event)
 static void handle_wifi_event(wifi_ap_event_t event)
 {
     if (event == WIFI_AP_EVENT_CLIENT_CONNECTED) {
-        update_wifi_status("Phone connected");
+        update_wifi_status("Device connected");
     }
 
     if (event == WIFI_AP_EVENT_CLIENT_DISCONNECTED) {
