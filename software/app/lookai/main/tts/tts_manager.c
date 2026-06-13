@@ -27,6 +27,8 @@ static const char *TAG = "tts_manager";
 #define TTS_GENERATE_TASK_STACK_SIZE 12288
 #define TTS_GENERATE_TASK_PRIORITY 4
 #define TTS_GENERATE_START_DELAY_MS 400
+#define TTS_POST_GENERATE_DELAY_MS 250
+#define TTS_PRE_PLAY_DELAY_MS 250
 #define TTS_TEXT_BUFFER_SIZE 224
 #define TTS_RESULT_BUFFER_SIZE 1024
 #define TTS_OUTPUT_WAV_PATH "/spiffs/tts_last.wav"
@@ -34,6 +36,7 @@ static const char *TAG = "tts_manager";
 typedef enum {
     TTS_MANAGER_EVENT_SAMPLE_1 = 0,
     TTS_MANAGER_EVENT_SAMPLE_2,
+    TTS_MANAGER_EVENT_GENERATE_DONE,
 } tts_manager_event_t;
 
 typedef enum {
@@ -49,6 +52,9 @@ static TaskHandle_t s_generate_task_handle = NULL;
 
 static tts_manager_state_t s_state = TTS_MANAGER_STATE_READY;
 static char s_pending_text[TTS_TEXT_BUFFER_SIZE] = {0};
+static char s_generate_error[TTS_RESULT_BUFFER_SIZE] = {0};
+static uint32_t s_generated_wav_bytes = 0;
+static bool s_generate_success = false;
 
 static void update_tts_ui(const char *status, const char *result, bool busy)
 {
@@ -102,31 +108,69 @@ static const char *text_for_event(tts_manager_event_t event)
     }
 }
 
-static void generate_and_play_task(void *arg)
+static void generate_task(void *arg)
 {
     (void)arg;
 
-    char details[TTS_RESULT_BUFFER_SIZE];
-    uint32_t wav_bytes = 0;
-
     ESP_LOGI(TAG, "Starting TTS generation");
 
+    uint32_t wav_bytes = 0;
     esp_err_t err = tts_api_client_generate_wav(
         s_pending_text,
         TTS_OUTPUT_WAV_PATH,
         &wav_bytes
     );
 
-    if (err != ESP_OK) {
+    if (err == ESP_OK) {
+        s_generate_success = true;
+        s_generated_wav_bytes = wav_bytes;
+        s_generate_error[0] = '\0';
+    } else {
         const char *api_error = tts_api_client_get_last_error();
+
+        s_generate_success = false;
+        s_generated_wav_bytes = 0;
+        snprintf(
+            s_generate_error,
+            sizeof(s_generate_error),
+            "%s",
+            api_error != NULL ? api_error : "TTS generation failed."
+        );
+
         ESP_LOGE(TAG, "TTS generation failed: %s", esp_err_to_name(err));
-        set_error_message(api_error != NULL ? api_error : "TTS generation failed.");
-        s_generate_task_handle = NULL;
-        vTaskDelete(NULL);
+    }
+
+    s_generate_task_handle = NULL;
+    post_event(TTS_MANAGER_EVENT_GENERATE_DONE);
+
+    vTaskDelete(NULL);
+}
+
+static void handle_generate_done(void)
+{
+    if (s_state != TTS_MANAGER_STATE_GENERATING) {
+        ESP_LOGI(TAG, "Ignoring TTS generation result because state changed");
         return;
     }
 
-    float kb = (float)wav_bytes / 1024.0f;
+    /*
+     * Let the worker task delete itself and give the system a moment to return
+     * its TLS stack/heap pressure before LVGL tries to redraw and before audio
+     * playback starts.
+     */
+    vTaskDelay(pdMS_TO_TICKS(TTS_POST_GENERATE_DELAY_MS));
+
+    if (!s_generate_success) {
+        set_error_message(
+            s_generate_error[0] != '\0' ?
+                s_generate_error :
+                "TTS generation failed."
+        );
+        return;
+    }
+
+    char details[TTS_RESULT_BUFFER_SIZE];
+    float kb = (float)s_generated_wav_bytes / 1024.0f;
 
     snprintf(
         details,
@@ -144,14 +188,18 @@ static void generate_and_play_task(void *arg)
         true
     );
 
+    /*
+     * Give the display a short window to draw the Playing state while the
+     * heavyweight HTTP/TLS task is already gone.
+     */
+    vTaskDelay(pdMS_TO_TICKS(TTS_PRE_PLAY_DELAY_MS));
+
     audio_playback_result_t playback = {0};
-    err = audio_playback_play_wav_file(TTS_OUTPUT_WAV_PATH, &playback);
+    esp_err_t err = audio_playback_play_wav_file(TTS_OUTPUT_WAV_PATH, &playback);
 
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "TTS playback failed: %s", esp_err_to_name(err));
         set_error_message("Could not play generated speech.");
-        s_generate_task_handle = NULL;
-        vTaskDelete(NULL);
         return;
     }
 
@@ -161,9 +209,6 @@ static void generate_and_play_task(void *arg)
         "Select a sample text.",
         false
     );
-
-    s_generate_task_handle = NULL;
-    vTaskDelete(NULL);
 }
 
 static void handle_speak_request(const char *text)
@@ -188,6 +233,9 @@ static void handle_speak_request(const char *text)
     }
 
     snprintf(s_pending_text, sizeof(s_pending_text), "%s", text);
+    s_generate_error[0] = '\0';
+    s_generated_wav_bytes = 0;
+    s_generate_success = false;
 
     s_state = TTS_MANAGER_STATE_GENERATING;
     update_tts_ui(
@@ -203,7 +251,7 @@ static void handle_speak_request(const char *text)
     vTaskDelay(pdMS_TO_TICKS(TTS_GENERATE_START_DELAY_MS));
 
     BaseType_t ok = xTaskCreate(
-        generate_and_play_task,
+        generate_task,
         "tts_generate",
         TTS_GENERATE_TASK_STACK_SIZE,
         NULL,
@@ -235,7 +283,19 @@ static void tts_task(void *arg)
             continue;
         }
 
-        handle_speak_request(text_for_event(event));
+        switch (event) {
+            case TTS_MANAGER_EVENT_SAMPLE_1:
+            case TTS_MANAGER_EVENT_SAMPLE_2:
+                handle_speak_request(text_for_event(event));
+                break;
+
+            case TTS_MANAGER_EVENT_GENERATE_DONE:
+                handle_generate_done();
+                break;
+
+            default:
+                break;
+        }
     }
 }
 

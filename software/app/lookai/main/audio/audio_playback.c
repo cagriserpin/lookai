@@ -181,35 +181,118 @@ static esp_err_t read_wav_info(FILE *file, wav_file_info_t *out_info)
         return ESP_ERR_INVALID_ARG;
     }
 
-    uint8_t header[AUDIO_PLAYBACK_WAV_HEADER_SIZE];
+    uint8_t riff_header[12];
 
     if (fseek(file, 0, SEEK_SET) != 0) {
         return ESP_FAIL;
     }
 
-    if (fread(header, 1, sizeof(header), file) != sizeof(header)) {
+    if (fread(riff_header, 1, sizeof(riff_header), file) != sizeof(riff_header)) {
+        ESP_LOGE(TAG, "WAV header is too small");
         return ESP_ERR_INVALID_SIZE;
     }
 
     if (
-        memcmp(&header[0], "RIFF", 4) != 0 ||
-        memcmp(&header[8], "WAVE", 4) != 0 ||
-        memcmp(&header[12], "fmt ", 4) != 0 ||
-        memcmp(&header[36], "data", 4) != 0
+        memcmp(&riff_header[0], "RIFF", 4) != 0 ||
+        memcmp(&riff_header[8], "WAVE", 4) != 0
     ) {
-        ESP_LOGE(TAG, "Unsupported WAV header");
+        ESP_LOGE(TAG, "Unsupported WAV container");
         return ESP_ERR_INVALID_RESPONSE;
     }
 
-    uint16_t audio_format = read_le16(&header[20]);
-    uint16_t channels = read_le16(&header[22]);
-    uint32_t sample_rate = read_le32(&header[24]);
-    uint16_t bits_per_sample = read_le16(&header[34]);
-    uint32_t pcm_bytes = read_le32(&header[40]);
+    bool fmt_found = false;
+    bool data_found = false;
 
-    if (audio_format != 1) {
-        ESP_LOGE(TAG, "Unsupported WAV format: %u", (unsigned int)audio_format);
-        return ESP_ERR_NOT_SUPPORTED;
+    uint16_t audio_format = 0;
+    uint16_t channels = 0;
+    uint16_t bits_per_sample = 0;
+    uint32_t sample_rate = 0;
+    uint32_t pcm_bytes = 0;
+    uint32_t data_offset = 0;
+
+    while (!fmt_found || !data_found) {
+        uint8_t chunk_header[8];
+
+        if (fread(chunk_header, 1, sizeof(chunk_header), file) != sizeof(chunk_header)) {
+            break;
+        }
+
+        uint32_t chunk_size = read_le32(&chunk_header[4]);
+        long chunk_data_pos = ftell(file);
+        if (chunk_data_pos < 0) {
+            return ESP_FAIL;
+        }
+
+        uint32_t padded_chunk_size = chunk_size + (chunk_size & 1U);
+
+        if (memcmp(&chunk_header[0], "fmt ", 4) == 0) {
+            uint8_t fmt[40] = {0};
+            size_t to_read = chunk_size < sizeof(fmt) ? (size_t)chunk_size : sizeof(fmt);
+
+            if (chunk_size < 16U) {
+                ESP_LOGE(TAG, "Invalid WAV fmt chunk size: %lu", (unsigned long)chunk_size);
+                return ESP_ERR_INVALID_RESPONSE;
+            }
+
+            if (fread(fmt, 1, to_read, file) != to_read) {
+                ESP_LOGE(TAG, "Could not read WAV fmt chunk");
+                return ESP_FAIL;
+            }
+
+            audio_format = read_le16(&fmt[0]);
+            channels = read_le16(&fmt[2]);
+            sample_rate = read_le32(&fmt[4]);
+            bits_per_sample = read_le16(&fmt[14]);
+
+            /*
+             * Groq and other cloud TTS providers may return WAV files with a
+             * non-44-byte RIFF layout or WAVE_FORMAT_EXTENSIBLE. Accept normal
+             * PCM and extensible PCM, then locate the real data chunk below.
+             */
+            bool extensible_pcm =
+                audio_format == 0xFFFE &&
+                to_read >= 40 &&
+                read_le16(&fmt[24]) == 1;
+
+            if (audio_format != 1 && !extensible_pcm) {
+                ESP_LOGE(TAG, "Unsupported WAV format: %u", (unsigned int)audio_format);
+                return ESP_ERR_NOT_SUPPORTED;
+            }
+
+            fmt_found = true;
+
+            long consumed = (long)to_read;
+            long remaining = (long)padded_chunk_size - consumed;
+            if (remaining > 0 && fseek(file, remaining, SEEK_CUR) != 0) {
+                return ESP_FAIL;
+            }
+        } else if (memcmp(&chunk_header[0], "data", 4) == 0) {
+            data_found = true;
+            data_offset = (uint32_t)chunk_data_pos;
+            pcm_bytes = chunk_size;
+
+            if (fmt_found) {
+                break;
+            }
+
+            if (fseek(file, (long)padded_chunk_size, SEEK_CUR) != 0) {
+                return ESP_FAIL;
+            }
+        } else {
+            if (fseek(file, (long)padded_chunk_size, SEEK_CUR) != 0) {
+                return ESP_FAIL;
+            }
+        }
+    }
+
+    if (!fmt_found) {
+        ESP_LOGE(TAG, "WAV fmt chunk not found");
+        return ESP_ERR_INVALID_RESPONSE;
+    }
+
+    if (!data_found || pcm_bytes == 0) {
+        ESP_LOGE(TAG, "WAV data chunk not found");
+        return ESP_ERR_INVALID_RESPONSE;
     }
 
     if (bits_per_sample != 16) {
@@ -222,15 +305,31 @@ static esp_err_t read_wav_info(FILE *file, wav_file_info_t *out_info)
         return ESP_ERR_NOT_SUPPORTED;
     }
 
+    if (sample_rate == 0) {
+        ESP_LOGE(TAG, "Invalid WAV sample rate");
+        return ESP_ERR_INVALID_RESPONSE;
+    }
+
     memset(out_info, 0, sizeof(*out_info));
     out_info->sample_rate = sample_rate;
     out_info->channels = channels;
     out_info->bits_per_sample = bits_per_sample;
     out_info->pcm_bytes = pcm_bytes;
-    out_info->data_offset = AUDIO_PLAYBACK_WAV_HEADER_SIZE;
+    out_info->data_offset = data_offset;
+
+    ESP_LOGI(
+        TAG,
+        "WAV info: %lu Hz, %u ch, %u bit, data_offset=%lu, data=%lu bytes",
+        (unsigned long)sample_rate,
+        (unsigned int)channels,
+        (unsigned int)bits_per_sample,
+        (unsigned long)data_offset,
+        (unsigned long)pcm_bytes
+    );
 
     return ESP_OK;
 }
+
 
 bool audio_playback_is_test_tone_playing(void)
 {
@@ -449,7 +548,7 @@ esp_err_t audio_playback_play_wav_file(
     s_wav_playing = false;
 
     struct stat st = {0};
-    uint32_t wav_bytes = wav.pcm_bytes + AUDIO_PLAYBACK_WAV_HEADER_SIZE;
+    uint32_t wav_bytes = wav.pcm_bytes + wav.data_offset;
     if (stat(path, &st) == 0 && st.st_size > 0) {
         wav_bytes = (uint32_t)st.st_size;
     }
