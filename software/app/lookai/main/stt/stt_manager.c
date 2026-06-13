@@ -15,6 +15,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -59,6 +60,89 @@ static char s_transcribe_path[STT_PATH_BUFFER_SIZE] = {0};
 static char s_transcribe_result[STT_TRANSCRIPT_BUFFER_SIZE] = {0};
 static bool s_transcribe_success = false;
 
+/*
+ * Stable UI text is restored after temporary Test/Play states finish.
+ * Temporary states must not overwrite this cache.
+ */
+static char s_stable_status[64] = "Ready";
+static char s_stable_result[STT_TRANSCRIPT_BUFFER_SIZE] = "Hold TALK to record.";
+
+static void copy_tr_ascii_text(
+    const char *input,
+    char *output,
+    size_t output_size
+)
+{
+    if (output == NULL || output_size == 0) {
+        return;
+    }
+
+    if (input == NULL) {
+        output[0] = '\0';
+        return;
+    }
+
+    size_t in_i = 0;
+    size_t out_i = 0;
+
+    while (input[in_i] != '\0' && out_i + 1 < output_size) {
+        unsigned char c0 = (unsigned char)input[in_i];
+
+        if (c0 < 0x80) {
+            output[out_i++] = (char)c0;
+            in_i++;
+            continue;
+        }
+
+        unsigned char c1 = (unsigned char)input[in_i + 1];
+        char replacement = '?';
+        size_t consumed = 1;
+
+        if (c0 == 0xC3) {
+            consumed = 2;
+
+            switch (c1) {
+                case 0x87: replacement = 'C'; break; /* Ç */
+                case 0xA7: replacement = 'c'; break; /* ç */
+                case 0x96: replacement = 'O'; break; /* Ö */
+                case 0xB6: replacement = 'o'; break; /* ö */
+                case 0x9C: replacement = 'U'; break; /* Ü */
+                case 0xBC: replacement = 'u'; break; /* ü */
+                default: replacement = '?'; break;
+            }
+        } else if (c0 == 0xC4) {
+            consumed = 2;
+
+            switch (c1) {
+                case 0x9E: replacement = 'G'; break; /* Ğ */
+                case 0x9F: replacement = 'g'; break; /* ğ */
+                case 0xB0: replacement = 'I'; break; /* İ */
+                case 0xB1: replacement = 'i'; break; /* ı */
+                default: replacement = '?'; break;
+            }
+        } else if (c0 == 0xC5) {
+            consumed = 2;
+
+            switch (c1) {
+                case 0x9E: replacement = 'S'; break; /* Ş */
+                case 0x9F: replacement = 's'; break; /* ş */
+                default: replacement = '?'; break;
+            }
+        } else if ((c0 & 0xE0) == 0xC0) {
+            consumed = 2;
+        } else if ((c0 & 0xF0) == 0xE0) {
+            consumed = 3;
+        } else if ((c0 & 0xF8) == 0xF0) {
+            consumed = 4;
+        }
+
+        output[out_i++] = replacement;
+        in_i += consumed;
+    }
+
+    output[out_i] = '\0';
+}
+
 static void update_stt_ui(
     const char *status,
     const char *result,
@@ -75,6 +159,73 @@ static void update_stt_ui(
         processing,
         speaker_test_active,
         recording_playback_active
+    );
+}
+
+static void show_temporary_status(
+    const char *status,
+    const char *result,
+    bool recording,
+    bool processing,
+    bool speaker_test_active,
+    bool recording_playback_active
+)
+{
+    char display_result[STT_TRANSCRIPT_BUFFER_SIZE];
+
+    copy_tr_ascii_text(
+        result != NULL ? result : "",
+        display_result,
+        sizeof(display_result)
+    );
+
+    update_stt_ui(
+        status != NULL ? status : "",
+        display_result,
+        recording,
+        processing,
+        speaker_test_active,
+        recording_playback_active
+    );
+}
+
+static void show_stable_status(
+    const char *status,
+    const char *result
+)
+{
+    snprintf(
+        s_stable_status,
+        sizeof(s_stable_status),
+        "%s",
+        status != NULL ? status : "Ready"
+    );
+
+    copy_tr_ascii_text(
+        result != NULL ? result : "",
+        s_stable_result,
+        sizeof(s_stable_result)
+    );
+
+    update_stt_ui(
+        s_stable_status,
+        s_stable_result,
+        false,
+        false,
+        false,
+        false
+    );
+}
+
+static void restore_stable_status(void)
+{
+    update_stt_ui(
+        s_stable_status,
+        s_stable_result,
+        false,
+        false,
+        false,
+        false
     );
 }
 
@@ -120,13 +271,9 @@ static void set_error_message(const char *status, const char *message)
 {
     s_state = STT_MANAGER_STATE_ERROR;
 
-    update_stt_ui(
+    show_stable_status(
         status != NULL ? status : "STT error",
-        message != NULL ? message : "Unknown error.",
-        false,
-        false,
-        false,
-        false
+        message != NULL ? message : "Unknown error."
     );
 }
 
@@ -161,21 +308,19 @@ static void transcribe_task(void *arg)
 
     if (err == ESP_OK) {
         s_transcribe_success = true;
-        snprintf(
+        copy_tr_ascii_text(
+            transcript,
             s_transcribe_result,
-            sizeof(s_transcribe_result),
-            "%s",
-            transcript
+            sizeof(s_transcribe_result)
         );
     } else {
         const char *api_error = stt_api_client_get_last_error();
 
         s_transcribe_success = false;
-        snprintf(
+        copy_tr_ascii_text(
+            api_error != NULL ? api_error : "Transcription failed.",
             s_transcribe_result,
-            sizeof(s_transcribe_result),
-            "%s",
-            api_error != NULL ? api_error : "Transcription failed."
+            sizeof(s_transcribe_result)
         );
 
         ESP_LOGE(TAG, "STT transcription failed: %s", esp_err_to_name(err));
@@ -236,7 +381,7 @@ static void start_transcription_for_path(const char *path)
     s_transcribe_success = false;
 
     s_state = STT_MANAGER_STATE_TRANSCRIBING;
-    update_stt_ui(
+    show_temporary_status(
         "Transcribing",
         "Sending audio to STT.",
         false,
@@ -278,7 +423,7 @@ static void handle_release(void)
     ESP_LOGI(TAG, "TALK released");
 
     s_state = STT_MANAGER_STATE_PROCESSING;
-    update_stt_ui("Saving", "Preparing recording.", false, true, false, false);
+    show_temporary_status("Saving", "Preparing recording.", false, true, false, false);
 
     audio_recorder_result_t result = {0};
     esp_err_t err = audio_recorder_stop(&result);
@@ -312,25 +457,17 @@ static void handle_transcribe_done(void)
 
     if (s_transcribe_result[0] == '\0') {
         s_state = STT_MANAGER_STATE_DONE;
-        update_stt_ui(
+        show_stable_status(
             "Transcript empty",
-            "No speech was recognized.",
-            false,
-            false,
-            false,
-            false
+            "No speech was recognized."
         );
         return;
     }
 
     s_state = STT_MANAGER_STATE_DONE;
-    update_stt_ui(
+    show_stable_status(
         "Transcript ready",
-        s_transcribe_result,
-        false,
-        false,
-        false,
-        false
+        s_transcribe_result
     );
 }
 
@@ -353,7 +490,7 @@ static void handle_toggle_speaker_test(void)
     if (s_state == STT_MANAGER_STATE_SPEAKER_TEST) {
         ESP_LOGI(TAG, "Stopping 440 Hz speaker test");
 
-        update_stt_ui(
+        show_temporary_status(
             "Stopping",
             "Stopping speaker test.",
             false,
@@ -370,14 +507,7 @@ static void handle_toggle_speaker_test(void)
         }
 
         s_state = STT_MANAGER_STATE_DONE;
-        update_stt_ui(
-            "Ready",
-            "Hold TALK to record.",
-            false,
-            false,
-            false,
-            false
-        );
+        restore_stable_status();
         return;
     }
 
@@ -391,7 +521,7 @@ static void handle_toggle_speaker_test(void)
     }
 
     s_state = STT_MANAGER_STATE_SPEAKER_TEST;
-    update_stt_ui(
+    show_temporary_status(
         "Testing",
         "Speaker test is playing.",
         false,
@@ -422,10 +552,37 @@ static void handle_play_recording(void)
 
     ESP_LOGI(TAG, "Playing saved recording: %s", path);
 
+    struct stat st = {0};
+    uint32_t wav_bytes = 0;
+    uint32_t pcm_bytes = 0;
+    uint32_t duration_ms = 0;
+
+    if (stat(path, &st) == 0 && st.st_size > 0) {
+        wav_bytes = (uint32_t)st.st_size;
+
+        if (wav_bytes > 44U) {
+            pcm_bytes = wav_bytes - 44U;
+            duration_ms = (uint32_t)(((uint64_t)pcm_bytes * 1000ULL) / 32000ULL);
+        }
+    }
+
+    float seconds = (float)duration_ms / 1000.0f;
+    float kb = (float)wav_bytes / 1024.0f;
+
+    char playing_details[256];
+    snprintf(
+        playing_details,
+        sizeof(playing_details),
+        "File: %s\nLength: %.1f sec\nSize: %.1f KB",
+        path,
+        seconds,
+        kb
+    );
+
     s_state = STT_MANAGER_STATE_PLAYING_RECORDING;
-    update_stt_ui(
+    show_temporary_status(
         "Playing",
-        "Playing recording.",
+        playing_details,
         false,
         false,
         false,
@@ -441,27 +598,8 @@ static void handle_play_recording(void)
         return;
     }
 
-    float seconds = (float)result.duration_ms / 1000.0f;
-    float kb = (float)result.wav_bytes / 1024.0f;
-
-    char details[256];
-    snprintf(
-        details,
-        sizeof(details),
-        "Played recording\nLength: %.1f sec\nSize: %.1f KB",
-        seconds,
-        kb
-    );
-
     s_state = STT_MANAGER_STATE_DONE;
-    update_stt_ui(
-        "Playback done",
-        details,
-        false,
-        false,
-        false,
-        false
-    );
+    restore_stable_status();
 }
 
 static void stt_task(void *arg)
@@ -470,7 +608,7 @@ static void stt_task(void *arg)
 
     stt_manager_event_t event;
 
-    update_stt_ui("Ready", "Hold TALK to record.", false, false, false, false);
+    show_stable_status("Ready", "Hold TALK to record.");
 
     while (true) {
         if (xQueueReceive(s_stt_event_queue, &event, portMAX_DELAY) != pdTRUE) {
