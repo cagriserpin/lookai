@@ -46,6 +46,8 @@ static ui_manager_state_t s_state = {
     .stt_result = "",
     .stt_recording = false,
     .stt_processing = false,
+    .stt_speaker_test_active = false,
+    .stt_recording_playback_active = false,
     .saved_items_count = 0,
 };
 
@@ -480,7 +482,9 @@ void ui_manager_update_stt_status(
     const char *status,
     const char *result,
     bool recording,
-    bool processing
+    bool processing,
+    bool speaker_test_active,
+    bool recording_playback_active
 )
 {
     bool changed = false;
@@ -507,12 +511,27 @@ void ui_manager_update_stt_status(
         changed = true;
     }
 
+    if (s_state.stt_speaker_test_active != speaker_test_active) {
+        s_state.stt_speaker_test_active = speaker_test_active;
+        changed = true;
+    }
+
+    if (s_state.stt_recording_playback_active != recording_playback_active) {
+        s_state.stt_recording_playback_active = recording_playback_active;
+        changed = true;
+    }
+
     if (!changed) {
         return;
     }
 
     if (menu_controller_current(&s_menu) == MENU_SCREEN_STT) {
-        if (recording && !processing) {
+        if (
+            recording &&
+            !processing &&
+            !speaker_test_active &&
+            !recording_playback_active
+        ) {
             return;
         }
 

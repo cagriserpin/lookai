@@ -20,19 +20,21 @@
 static const char *TAG = "stt_manager";
 
 #define STT_EVENT_QUEUE_LEN 8
-#define STT_TASK_STACK_SIZE 4096
+#define STT_TASK_STACK_SIZE 10240
 
 typedef enum {
     STT_MANAGER_EVENT_PRESS = 0,
     STT_MANAGER_EVENT_RELEASE,
-    STT_MANAGER_EVENT_PLAY,
+    STT_MANAGER_EVENT_TOGGLE_SPEAKER_TEST,
+    STT_MANAGER_EVENT_PLAY_RECORDING,
 } stt_manager_event_t;
 
 typedef enum {
     STT_MANAGER_STATE_READY = 0,
     STT_MANAGER_STATE_RECORDING,
     STT_MANAGER_STATE_PROCESSING,
-    STT_MANAGER_STATE_PLAYING,
+    STT_MANAGER_STATE_SPEAKER_TEST,
+    STT_MANAGER_STATE_PLAYING_RECORDING,
     STT_MANAGER_STATE_DONE,
     STT_MANAGER_STATE_ERROR,
 } stt_manager_state_t;
@@ -40,6 +42,25 @@ typedef enum {
 static QueueHandle_t s_stt_event_queue = NULL;
 static TaskHandle_t s_stt_task_handle = NULL;
 static stt_manager_state_t s_state = STT_MANAGER_STATE_READY;
+
+static void update_stt_ui(
+    const char *status,
+    const char *result,
+    bool recording,
+    bool processing,
+    bool speaker_test_active,
+    bool recording_playback_active
+)
+{
+    ui_manager_update_stt_status(
+        status,
+        result,
+        recording,
+        processing,
+        speaker_test_active,
+        recording_playback_active
+    );
+}
 
 static void post_event(stt_manager_event_t event)
 {
@@ -60,9 +81,14 @@ void stt_manager_release(void)
     post_event(STT_MANAGER_EVENT_RELEASE);
 }
 
-void stt_manager_toggle_audio_playback(void)
+void stt_manager_toggle_speaker_test(void)
 {
-    post_event(STT_MANAGER_EVENT_PLAY);
+    post_event(STT_MANAGER_EVENT_TOGGLE_SPEAKER_TEST);
+}
+
+void stt_manager_play_recording(void)
+{
+    post_event(STT_MANAGER_EVENT_PLAY_RECORDING);
 }
 
 static void set_error_status(const char *message, esp_err_t err)
@@ -73,22 +99,26 @@ static void set_error_status(const char *message, esp_err_t err)
         result,
         sizeof(result),
         "%s\n%s",
-        message != NULL ? message : "Recorder error",
+        message != NULL ? message : "Audio error",
         esp_err_to_name(err)
     );
 
     s_state = STT_MANAGER_STATE_ERROR;
-    ui_manager_update_stt_status("Record error", result, false, false);
+    update_stt_ui("Audio error", result, false, false, false, false);
 }
 
 static void handle_press(void)
 {
-    if (s_state == STT_MANAGER_STATE_PROCESSING || s_state == STT_MANAGER_STATE_PLAYING) {
-        ESP_LOGI(TAG, "Ignoring press while STT is busy");
+    if (
+        s_state == STT_MANAGER_STATE_PROCESSING ||
+        s_state == STT_MANAGER_STATE_SPEAKER_TEST ||
+        s_state == STT_MANAGER_STATE_PLAYING_RECORDING
+    ) {
+        ESP_LOGI(TAG, "Ignoring TALK press while STT/audio is busy");
         return;
     }
 
-    ESP_LOGI(TAG, "Push to Talk pressed");
+    ESP_LOGI(TAG, "TALK pressed");
 
     /*
      * Start the real recorder, but do not repaint the STT screen from here.
@@ -113,10 +143,10 @@ static void handle_release(void)
         return;
     }
 
-    ESP_LOGI(TAG, "Push to Talk released");
+    ESP_LOGI(TAG, "TALK released");
 
     s_state = STT_MANAGER_STATE_PROCESSING;
-    ui_manager_update_stt_status("Saving...", "", false, true);
+    update_stt_ui("Saving...", "", false, true, false, false);
 
     audio_recorder_result_t result = {0};
     esp_err_t err = audio_recorder_stop(&result);
@@ -134,75 +164,144 @@ static void handle_release(void)
     snprintf(
         details,
         sizeof(details),
-        "Saved: %s\nLength: %.1f sec\nSize: %.1f KB",
-        result.path,
+        "Saved recording\nLength: %.1f sec\nSize: %.1f KB",
         seconds,
         kb
     );
 
     s_state = STT_MANAGER_STATE_DONE;
-    ui_manager_update_stt_status(
+    update_stt_ui(
         "Recording saved",
         details,
+        false,
+        false,
         false,
         false
     );
 }
 
-static void handle_play(void)
+static void handle_toggle_speaker_test(void)
 {
     if (s_state == STT_MANAGER_STATE_RECORDING) {
-        ESP_LOGI(TAG, "Ignoring audio toggle while STT is recording");
+        ESP_LOGI(TAG, "Ignoring speaker test while recording");
         return;
     }
 
-    if (s_state == STT_MANAGER_STATE_PROCESSING) {
-        ESP_LOGI(TAG, "Ignoring audio toggle while STT is processing");
+    if (s_state == STT_MANAGER_STATE_PROCESSING || s_state == STT_MANAGER_STATE_PLAYING_RECORDING) {
+        ESP_LOGI(TAG, "Ignoring speaker test while busy");
         return;
     }
 
-    if (s_state == STT_MANAGER_STATE_PLAYING) {
-        ESP_LOGI(TAG, "Stopping 440 Hz sine playback");
+    if (s_state == STT_MANAGER_STATE_SPEAKER_TEST) {
+        ESP_LOGI(TAG, "Stopping 440 Hz speaker test");
 
-        ui_manager_update_stt_status(
-            "Stopping audio...",
-            "Stopping speaker test.",
+        update_stt_ui(
+            "Stopping speaker...",
+            "Stopping 440 Hz test tone.",
             false,
-            true
+            true,
+            true,
+            false
         );
 
-        esp_err_t err = audio_playback_stop();
+        esp_err_t err = audio_playback_stop_sine_440();
         if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to stop audio playback: %s", esp_err_to_name(err));
-            set_error_status("Could not stop audio playback.", err);
+            ESP_LOGE(TAG, "Failed to stop speaker test: %s", esp_err_to_name(err));
+            set_error_status("Could not stop speaker test.", err);
             return;
         }
 
         s_state = STT_MANAGER_STATE_DONE;
-        ui_manager_update_stt_status(
-            "Audio stopped",
-            "Speaker test stopped.",
+        update_stt_ui(
+            "Speaker test stopped",
+            "440 Hz test tone stopped.",
+            false,
+            false,
             false,
             false
         );
         return;
     }
 
-    ESP_LOGI(TAG, "Starting 440 Hz sine playback");
+    ESP_LOGI(TAG, "Starting 440 Hz speaker test");
 
     esp_err_t err = audio_playback_start_sine_440();
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to start audio playback: %s", esp_err_to_name(err));
-        set_error_status("Could not start audio playback.", err);
+        ESP_LOGE(TAG, "Failed to start speaker test: %s", esp_err_to_name(err));
+        set_error_status("Could not start speaker test.", err);
         return;
     }
 
-    s_state = STT_MANAGER_STATE_PLAYING;
-    ui_manager_update_stt_status(
-        "Playing audio...",
-        "440 Hz speaker test is playing.",
+    s_state = STT_MANAGER_STATE_SPEAKER_TEST;
+    update_stt_ui(
+        "Testing speaker...",
+        "440 Hz test tone is playing.",
+        false,
+        false,
+        true,
+        false
+    );
+}
+
+static void handle_play_recording(void)
+{
+    if (s_state == STT_MANAGER_STATE_RECORDING) {
+        ESP_LOGI(TAG, "Ignoring recording playback while recording");
+        return;
+    }
+
+    if (
+        s_state == STT_MANAGER_STATE_PROCESSING ||
+        s_state == STT_MANAGER_STATE_SPEAKER_TEST ||
+        s_state == STT_MANAGER_STATE_PLAYING_RECORDING
+    ) {
+        ESP_LOGI(TAG, "Ignoring recording playback while busy");
+        return;
+    }
+
+    const char *path = audio_recorder_get_path();
+
+    ESP_LOGI(TAG, "Playing saved recording: %s", path);
+
+    s_state = STT_MANAGER_STATE_PLAYING_RECORDING;
+    update_stt_ui(
+        "Playing recording...",
+        "Playing saved microphone recording.",
+        false,
+        false,
         false,
         true
+    );
+
+    audio_playback_result_t result = {0};
+    esp_err_t err = audio_playback_play_wav_file(path, &result);
+
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to play recording: %s", esp_err_to_name(err));
+        set_error_status("Could not play recording.", err);
+        return;
+    }
+
+    float seconds = (float)result.duration_ms / 1000.0f;
+    float kb = (float)result.wav_bytes / 1024.0f;
+
+    char details[256];
+    snprintf(
+        details,
+        sizeof(details),
+        "Played recording\nLength: %.1f sec\nSize: %.1f KB",
+        seconds,
+        kb
+    );
+
+    s_state = STT_MANAGER_STATE_DONE;
+    update_stt_ui(
+        "Playback done",
+        details,
+        false,
+        false,
+        false,
+        false
     );
 }
 
@@ -212,7 +311,7 @@ static void stt_task(void *arg)
 
     stt_manager_event_t event;
 
-    ui_manager_update_stt_status("Ready", "", false, false);
+    update_stt_ui("Ready", "", false, false, false, false);
 
     while (true) {
         if (xQueueReceive(s_stt_event_queue, &event, portMAX_DELAY) != pdTRUE) {
@@ -228,8 +327,12 @@ static void stt_task(void *arg)
                 handle_release();
                 break;
 
-            case STT_MANAGER_EVENT_PLAY:
-                handle_play();
+            case STT_MANAGER_EVENT_TOGGLE_SPEAKER_TEST:
+                handle_toggle_speaker_test();
+                break;
+
+            case STT_MANAGER_EVENT_PLAY_RECORDING:
+                handle_play_recording();
                 break;
 
             default:

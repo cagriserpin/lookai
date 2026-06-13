@@ -31,7 +31,8 @@ typedef struct {
     ui_manager_ssid_action_cb_t forget_saved;     /**< Forget a selected saved SSID. */
     ui_manager_action_cb_t stt_press;             /**< Start push-to-talk recording flow. */
     ui_manager_action_cb_t stt_release;           /**< Stop push-to-talk recording flow. */
-    ui_manager_action_cb_t stt_play;              /**< Toggle speaker test audio. */
+    ui_manager_action_cb_t stt_test_speaker;      /**< Toggle the 440 Hz speaker test tone. */
+    ui_manager_action_cb_t stt_play_recording;    /**< Play the last saved recording. */
 } ui_manager_callbacks_t;
 
 /**
@@ -56,6 +57,8 @@ typedef struct {
     char stt_result[256];                                                  /**< Latest speech-to-text result text. */
     bool stt_recording;                                                    /**< True while push-to-talk is pressed. */
     bool stt_processing;                                                   /**< True while fake/real STT processing is running. */
+    bool stt_speaker_test_active;                                          /**< True while the speaker test tone is playing. */
+    bool stt_recording_playback_active;                                    /**< True while the saved recording is playing. */
     ui_manager_saved_network_t saved_items[UI_MANAGER_MAX_SAVED_NETWORKS]; /**< Saved networks shown in UI. */
     int saved_items_count;                                                 /**< Number of saved items. */
 } ui_manager_state_t;
@@ -84,5 +87,7 @@ void ui_manager_update_stt_status(
     const char *status,
     const char *result,
     bool recording,
-    bool processing
+    bool processing,
+    bool speaker_test_active,
+    bool recording_playback_active
 );

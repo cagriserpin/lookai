@@ -67,7 +67,8 @@ esp_err_t app_controller_start(void)
         .forget_saved = wifi_manager_forget_saved_network,
         .stt_press = stt_manager_press,
         .stt_release = stt_manager_release,
-        .stt_play = stt_manager_toggle_audio_playback,
+        .stt_test_speaker = stt_manager_toggle_speaker_test,
+        .stt_play_recording = stt_manager_play_recording,
     };
 
     ui_manager_set_callbacks(&callbacks);
