@@ -4,6 +4,8 @@ idf_component_register(
 
         "app/app_controller.c"
 
+        "stt/stt_manager.c"
+
         "wifi/wifi_manager.c"
         "wifi/wifi_ap.c"
         "wifi/wifi_storage.c"
@@ -26,12 +28,14 @@ idf_component_register(
         "ui/scaffold/ui_scaffold.c"
 
         "ui/menus/settings/settings_screen.c"
-        "ui/menus/settings/wifi_settings_screen.c"
-        "ui/menus/settings/manage_networks_screen.c"
-        "ui/menus/settings/brightness_screen.c"
+        "ui/menus/settings/wifi/wifi_settings_screen.c"
+        "ui/menus/settings/wifi/manage_networks_screen.c"
+        "ui/menus/settings/brightness/brightness_screen.c"
+        "ui/menus/settings/stt/stt_screen.c"
     INCLUDE_DIRS
         "."
         "app"
+        "stt"
         "wifi"
         "portal"
         "ui"
@@ -40,6 +44,9 @@ idf_component_register(
         "ui/items"
         "ui/scaffold"
         "ui/menus/settings"
+        "ui/menus/settings/brightness"
+        "ui/menus/settings/wifi"
+        "ui/menus/settings/stt"
     REQUIRES
         esp_wifi
         esp_event

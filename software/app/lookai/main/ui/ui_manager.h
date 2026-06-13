@@ -29,6 +29,8 @@ typedef struct {
     ui_manager_action_cb_t close_portal;          /**< Close setup portal when it is active. */
     ui_manager_ssid_action_cb_t connect_saved;    /**< Connect to a selected saved SSID. */
     ui_manager_ssid_action_cb_t forget_saved;     /**< Forget a selected saved SSID. */
+    ui_manager_action_cb_t stt_press;             /**< Start push-to-talk recording flow. */
+    ui_manager_action_cb_t stt_release;           /**< Stop push-to-talk recording flow. */
 } ui_manager_callbacks_t;
 
 /**
@@ -49,6 +51,10 @@ typedef struct {
     int saved_count;                                                       /**< Saved network count. */
     bool portal_active;                                                    /**< True when setup portal is active. */
     int brightness_percent;                                                /**< Display brightness, 10-100. */
+    char stt_status[64];                                                   /**< Speech-to-text state label. */
+    char stt_result[256];                                                  /**< Latest speech-to-text result text. */
+    bool stt_recording;                                                    /**< True while push-to-talk is pressed. */
+    bool stt_processing;                                                   /**< True while fake/real STT processing is running. */
     ui_manager_saved_network_t saved_items[UI_MANAGER_MAX_SAVED_NETWORKS]; /**< Saved networks shown in UI. */
     int saved_items_count;                                                 /**< Number of saved items. */
 } ui_manager_state_t;
@@ -71,4 +77,11 @@ void ui_manager_update_wifi_status(
 void ui_manager_set_saved_networks(
     const ui_manager_saved_network_t *items,
     int count
+);
+
+void ui_manager_update_stt_status(
+    const char *status,
+    const char *result,
+    bool recording,
+    bool processing
 );

@@ -9,6 +9,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
 
+#include "stt_manager.h"
 #include "ui_manager.h"
 #include "wifi_manager.h"
 #include "wifi_storage.h"
@@ -37,12 +38,15 @@ esp_err_t app_controller_start(void)
 
     ESP_RETURN_ON_ERROR(ui_manager_init(), TAG, "Failed to initialize UI");
     ESP_RETURN_ON_ERROR(wifi_storage_init(), TAG, "Failed to initialize Wi-Fi storage");
+    ESP_RETURN_ON_ERROR(stt_manager_start(), TAG, "Failed to start STT manager");
 
     ui_manager_callbacks_t callbacks = {
         .connect_another = wifi_manager_open_setup_portal,
         .close_portal = wifi_manager_close_setup_portal,
         .connect_saved = wifi_manager_connect_saved_network,
         .forget_saved = wifi_manager_forget_saved_network,
+        .stt_press = stt_manager_press,
+        .stt_release = stt_manager_release,
     };
 
     ui_manager_set_callbacks(&callbacks);

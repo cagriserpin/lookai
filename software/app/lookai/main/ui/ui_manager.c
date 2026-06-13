@@ -12,13 +12,14 @@
 #include "bsp/esp32_s3_touch_amoled_1_75.h"
 #include "lvgl.h"
 
-#include "brightness_screen.h"
-#include "manage_networks_screen.h"
+#include "brightness/brightness_screen.h"
+#include "wifi/manage_networks_screen.h"
 #include "menu_controller.h"
 #include "settings_screen.h"
+#include "stt/stt_screen.h"
 #include "ui_scaffold.h"
 #include "ui_theme.h"
-#include "wifi_settings_screen.h"
+#include "wifi/wifi_settings_screen.h"
 
 static const char *TAG = "ui_manager";
 
@@ -41,6 +42,10 @@ static ui_manager_state_t s_state = {
     .saved_count = 0,
     .portal_active = false,
     .brightness_percent = 100,
+    .stt_status = "Ready",
+    .stt_result = "",
+    .stt_recording = false,
+    .stt_processing = false,
     .saved_items_count = 0,
 };
 
@@ -65,6 +70,9 @@ static const char *get_current_title(void)
         case MENU_SCREEN_BRIGHTNESS:
             return "Brightness";
 
+        case MENU_SCREEN_STT:
+            return "Speech to Text";
+
         case MENU_SCREEN_SETTINGS:
         default:
             return "Settings";
@@ -80,6 +88,9 @@ static ui_scaffold_title_icon_t get_current_title_icon(void)
 
         case MENU_SCREEN_BRIGHTNESS:
             return UI_SCAFFOLD_TITLE_ICON_BRIGHTNESS;
+
+        case MENU_SCREEN_STT:
+            return UI_SCAFFOLD_TITLE_ICON_NONE;
 
         case MENU_SCREEN_SETTINGS:
         default:
@@ -125,6 +136,13 @@ static void brightness_button_event_cb(lv_event_t *event)
 {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
         menu_controller_push(&s_menu, MENU_SCREEN_BRIGHTNESS);
+    }
+}
+
+static void stt_button_event_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        menu_controller_push(&s_menu, MENU_SCREEN_STT);
     }
 }
 
@@ -247,7 +265,8 @@ static void render_body_unlocked(lv_obj_t *body)
             &s_state,
             &s_callbacks,
             wifi_button_event_cb,
-            brightness_button_event_cb
+            brightness_button_event_cb,
+            stt_button_event_cb
         );
     } else if (screen_id == MENU_SCREEN_WIFI) {
         wifi_settings_screen_render(
@@ -263,6 +282,12 @@ static void render_body_unlocked(lv_obj_t *body)
             &s_state,
             brightness_slider_event_cb
         );
+    } else if (screen_id == MENU_SCREEN_STT) {
+        stt_screen_render(
+            body,
+            &s_state,
+            &s_callbacks
+        );
     } else {
         manage_networks_screen_render(
             body,
@@ -274,7 +299,9 @@ static void render_body_unlocked(lv_obj_t *body)
         );
     }
 
-    append_body_scroll_spacer(body);
+    if (screen_id != MENU_SCREEN_STT) {
+        append_body_scroll_spacer(body);
+    }
 }
 
 static void render_current_unlocked(void)
@@ -440,11 +467,55 @@ void ui_manager_update_wifi_status(
 
     if (current == MENU_SCREEN_SAVED_NETWORKS) {
         should_render = portal_changed;
-    } else if (current == MENU_SCREEN_BRIGHTNESS) {
+    } else if (current == MENU_SCREEN_BRIGHTNESS || current == MENU_SCREEN_STT) {
         should_render = false;
     }
 
     if (should_render) {
+        render_body_only_locked();
+    }
+}
+
+void ui_manager_update_stt_status(
+    const char *status,
+    const char *result,
+    bool recording,
+    bool processing
+)
+{
+    bool changed = false;
+
+    if (status != NULL && strcmp(s_state.stt_status, status) != 0) {
+        strncpy(s_state.stt_status, status, sizeof(s_state.stt_status) - 1);
+        s_state.stt_status[sizeof(s_state.stt_status) - 1] = '\0';
+        changed = true;
+    }
+
+    if (result != NULL && strcmp(s_state.stt_result, result) != 0) {
+        strncpy(s_state.stt_result, result, sizeof(s_state.stt_result) - 1);
+        s_state.stt_result[sizeof(s_state.stt_result) - 1] = '\0';
+        changed = true;
+    }
+
+    if (s_state.stt_recording != recording) {
+        s_state.stt_recording = recording;
+        changed = true;
+    }
+
+    if (s_state.stt_processing != processing) {
+        s_state.stt_processing = processing;
+        changed = true;
+    }
+
+    if (!changed) {
+        return;
+    }
+
+    if (menu_controller_current(&s_menu) == MENU_SCREEN_STT) {
+        if (recording && !processing) {
+            return;
+        }
+
         render_body_only_locked();
     }
 }
