@@ -17,6 +17,7 @@
 #include "menu_controller.h"
 #include "settings_screen.h"
 #include "stt/stt_screen.h"
+#include "tts/tts_screen.h"
 #include "ui_scaffold.h"
 #include "ui_theme.h"
 #include "wifi/wifi_settings_screen.h"
@@ -75,6 +76,9 @@ static const char *get_current_title(void)
         case MENU_SCREEN_STT:
             return "Speech to Text";
 
+        case MENU_SCREEN_TTS:
+            return "Text to Speech";
+
         case MENU_SCREEN_SETTINGS:
         default:
             return "Settings";
@@ -92,6 +96,7 @@ static ui_scaffold_title_icon_t get_current_title_icon(void)
             return UI_SCAFFOLD_TITLE_ICON_BRIGHTNESS;
 
         case MENU_SCREEN_STT:
+        case MENU_SCREEN_TTS:
             return UI_SCAFFOLD_TITLE_ICON_NONE;
 
         case MENU_SCREEN_SETTINGS:
@@ -145,6 +150,13 @@ static void stt_button_event_cb(lv_event_t *event)
 {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
         menu_controller_push(&s_menu, MENU_SCREEN_STT);
+    }
+}
+
+static void tts_button_event_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        menu_controller_push(&s_menu, MENU_SCREEN_TTS);
     }
 }
 
@@ -268,7 +280,8 @@ static void render_body_unlocked(lv_obj_t *body)
             &s_callbacks,
             wifi_button_event_cb,
             brightness_button_event_cb,
-            stt_button_event_cb
+            stt_button_event_cb,
+            tts_button_event_cb
         );
     } else if (screen_id == MENU_SCREEN_WIFI) {
         wifi_settings_screen_render(
@@ -290,6 +303,8 @@ static void render_body_unlocked(lv_obj_t *body)
             &s_state,
             &s_callbacks
         );
+    } else if (screen_id == MENU_SCREEN_TTS) {
+        tts_screen_render(body);
     } else {
         manage_networks_screen_render(
             body,
@@ -301,7 +316,7 @@ static void render_body_unlocked(lv_obj_t *body)
         );
     }
 
-    if (screen_id != MENU_SCREEN_STT) {
+    if (screen_id != MENU_SCREEN_STT && screen_id != MENU_SCREEN_TTS) {
         append_body_scroll_spacer(body);
     }
 }
@@ -469,7 +484,11 @@ void ui_manager_update_wifi_status(
 
     if (current == MENU_SCREEN_SAVED_NETWORKS) {
         should_render = portal_changed;
-    } else if (current == MENU_SCREEN_BRIGHTNESS || current == MENU_SCREEN_STT) {
+    } else if (
+        current == MENU_SCREEN_BRIGHTNESS ||
+        current == MENU_SCREEN_STT ||
+        current == MENU_SCREEN_TTS
+    ) {
         should_render = false;
     }
 

@@ -27,7 +27,8 @@ void settings_screen_render(
     const ui_manager_callbacks_t *callbacks,
     lv_event_cb_t wifi_button_cb,
     lv_event_cb_t brightness_button_cb,
-    lv_event_cb_t stt_button_cb
+    lv_event_cb_t stt_button_cb,
+    lv_event_cb_t tts_button_cb
 )
 {
     (void)state;
@@ -49,6 +50,12 @@ void settings_screen_render(
         .type = UI_SETTINGS_ITEM_ICON_TEXT,
         .text = "STT",
         .color = 0x22C55E,
+    };
+
+    const ui_settings_item_icon_t tts_icon = {
+        .type = UI_SETTINGS_ITEM_ICON_TEXT,
+        .text = "TTS",
+        .color = 0xA855F7,
     };
 
     ui_settings_item_create(
@@ -76,6 +83,16 @@ void settings_screen_render(
         &stt_icon,
         "Speech to Text",
         stt_button_cb,
+        NULL
+    );
+
+    create_settings_separator(body);
+
+    ui_settings_item_create(
+        body,
+        &tts_icon,
+        "Text to Speech",
+        tts_button_cb,
         NULL
     );
 }

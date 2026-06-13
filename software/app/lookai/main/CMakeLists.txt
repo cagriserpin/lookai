@@ -37,6 +37,7 @@ idf_component_register(
         "ui/menus/settings/wifi/manage_networks_screen.c"
         "ui/menus/settings/brightness/brightness_screen.c"
         "ui/menus/settings/stt/stt_screen.c"
+        "ui/menus/settings/tts/tts_screen.c"
     INCLUDE_DIRS
         "."
         "app"
@@ -53,6 +54,7 @@ idf_component_register(
         "ui/menus/settings/brightness"
         "ui/menus/settings/wifi"
         "ui/menus/settings/stt"
+        "ui/menus/settings/tts"
     REQUIRES
         esp_wifi
         esp_event

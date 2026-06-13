@@ -301,7 +301,7 @@ void stt_screen_render(
         !recording_playback_active;
 
     /*
-     * The STT page itself is fixed. Only the middle text panel scrolls.
+     * The STT page itself is fixed. Only the top text panel scrolls.
      */
     lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_scroll_dir(body, LV_DIR_NONE);
@@ -320,7 +320,21 @@ void stt_screen_render(
     );
 
     /*
-     * Top: TALK button. It stays fixed and is not pushed by transcript text.
+     * Top: scrollable status/transcript panel.
+     */
+    lv_obj_t *status_label = NULL;
+    lv_obj_t *message_label = NULL;
+    create_text_panel(
+        container,
+        status,
+        message,
+        message_color,
+        &status_label,
+        &message_label
+    );
+
+    /*
+     * Middle: TALK button.
      */
     lv_obj_t *talk_holder = lv_obj_create(container);
     lv_obj_set_size(talk_holder, STT_CONTAINER_WIDTH, STT_TALK_AREA_HEIGHT);
@@ -350,20 +364,6 @@ void stt_screen_render(
     lv_obj_set_style_text_color(talk_label, lv_color_hex(UI_COLOR_TEXT), 0);
     lv_obj_set_style_text_align(talk_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_center(talk_label);
-
-    /*
-     * Middle: scrollable status/transcript panel.
-     */
-    lv_obj_t *status_label = NULL;
-    lv_obj_t *message_label = NULL;
-    create_text_panel(
-        container,
-        status,
-        message,
-        message_color,
-        &status_label,
-        &message_label
-    );
 
     s_talk_context.callbacks = callbacks;
     s_talk_context.status_label = status_label;
