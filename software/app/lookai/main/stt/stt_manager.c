@@ -5,6 +5,7 @@
 
 #include "stt_manager.h"
 
+#include "audio_playback.h"
 #include "audio_recorder.h"
 #include "esp_log.h"
 
@@ -24,12 +25,14 @@ static const char *TAG = "stt_manager";
 typedef enum {
     STT_MANAGER_EVENT_PRESS = 0,
     STT_MANAGER_EVENT_RELEASE,
+    STT_MANAGER_EVENT_PLAY,
 } stt_manager_event_t;
 
 typedef enum {
     STT_MANAGER_STATE_READY = 0,
     STT_MANAGER_STATE_RECORDING,
     STT_MANAGER_STATE_PROCESSING,
+    STT_MANAGER_STATE_PLAYING,
     STT_MANAGER_STATE_DONE,
     STT_MANAGER_STATE_ERROR,
 } stt_manager_state_t;
@@ -57,6 +60,11 @@ void stt_manager_release(void)
     post_event(STT_MANAGER_EVENT_RELEASE);
 }
 
+void stt_manager_toggle_audio_playback(void)
+{
+    post_event(STT_MANAGER_EVENT_PLAY);
+}
+
 static void set_error_status(const char *message, esp_err_t err)
 {
     char result[192];
@@ -75,8 +83,8 @@ static void set_error_status(const char *message, esp_err_t err)
 
 static void handle_press(void)
 {
-    if (s_state == STT_MANAGER_STATE_PROCESSING) {
-        ESP_LOGI(TAG, "Ignoring press while STT is processing");
+    if (s_state == STT_MANAGER_STATE_PROCESSING || s_state == STT_MANAGER_STATE_PLAYING) {
+        ESP_LOGI(TAG, "Ignoring press while STT is busy");
         return;
     }
 
@@ -141,6 +149,63 @@ static void handle_release(void)
     );
 }
 
+static void handle_play(void)
+{
+    if (s_state == STT_MANAGER_STATE_RECORDING) {
+        ESP_LOGI(TAG, "Ignoring audio toggle while STT is recording");
+        return;
+    }
+
+    if (s_state == STT_MANAGER_STATE_PROCESSING) {
+        ESP_LOGI(TAG, "Ignoring audio toggle while STT is processing");
+        return;
+    }
+
+    if (s_state == STT_MANAGER_STATE_PLAYING) {
+        ESP_LOGI(TAG, "Stopping 440 Hz sine playback");
+
+        ui_manager_update_stt_status(
+            "Stopping audio...",
+            "Stopping speaker test.",
+            false,
+            true
+        );
+
+        esp_err_t err = audio_playback_stop();
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to stop audio playback: %s", esp_err_to_name(err));
+            set_error_status("Could not stop audio playback.", err);
+            return;
+        }
+
+        s_state = STT_MANAGER_STATE_DONE;
+        ui_manager_update_stt_status(
+            "Audio stopped",
+            "Speaker test stopped.",
+            false,
+            false
+        );
+        return;
+    }
+
+    ESP_LOGI(TAG, "Starting 440 Hz sine playback");
+
+    esp_err_t err = audio_playback_start_sine_440();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start audio playback: %s", esp_err_to_name(err));
+        set_error_status("Could not start audio playback.", err);
+        return;
+    }
+
+    s_state = STT_MANAGER_STATE_PLAYING;
+    ui_manager_update_stt_status(
+        "Playing audio...",
+        "440 Hz speaker test is playing.",
+        false,
+        true
+    );
+}
+
 static void stt_task(void *arg)
 {
     (void)arg;
@@ -161,6 +226,10 @@ static void stt_task(void *arg)
 
             case STT_MANAGER_EVENT_RELEASE:
                 handle_release();
+                break;
+
+            case STT_MANAGER_EVENT_PLAY:
+                handle_play();
                 break;
 
             default:

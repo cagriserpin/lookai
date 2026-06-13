@@ -5,6 +5,7 @@
 
 #include "app_controller.h"
 
+#include "audio_playback.h"
 #include "audio_recorder.h"
 #include "esp_check.h"
 #include "esp_err.h"
@@ -49,6 +50,14 @@ esp_err_t app_controller_start(void)
         ESP_LOGW(TAG, "Audio recorder init failed: %s", esp_err_to_name(audio_err));
     }
 
+    esp_err_t playback_err = audio_playback_init();
+    if (playback_err != ESP_OK) {
+        /*
+         * Keep the app usable even if speaker playback is not ready yet.
+         */
+        ESP_LOGW(TAG, "Audio playback init failed: %s", esp_err_to_name(playback_err));
+    }
+
     ESP_RETURN_ON_ERROR(stt_manager_start(), TAG, "Failed to start STT manager");
 
     ui_manager_callbacks_t callbacks = {
@@ -58,6 +67,7 @@ esp_err_t app_controller_start(void)
         .forget_saved = wifi_manager_forget_saved_network,
         .stt_press = stt_manager_press,
         .stt_release = stt_manager_release,
+        .stt_play = stt_manager_toggle_audio_playback,
     };
 
     ui_manager_set_callbacks(&callbacks);

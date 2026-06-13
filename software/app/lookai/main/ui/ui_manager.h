@@ -31,6 +31,7 @@ typedef struct {
     ui_manager_ssid_action_cb_t forget_saved;     /**< Forget a selected saved SSID. */
     ui_manager_action_cb_t stt_press;             /**< Start push-to-talk recording flow. */
     ui_manager_action_cb_t stt_release;           /**< Stop push-to-talk recording flow. */
+    ui_manager_action_cb_t stt_play;              /**< Toggle speaker test audio. */
 } ui_manager_callbacks_t;
 
 /**

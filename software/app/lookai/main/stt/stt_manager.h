@@ -21,3 +21,8 @@ void stt_manager_press(void);
  * @brief Notify the STT backend that Push to Talk was released.
  */
 void stt_manager_release(void);
+
+/**
+ * @brief Toggle the 440 Hz speaker test tone.
+ */
+void stt_manager_toggle_audio_playback(void);

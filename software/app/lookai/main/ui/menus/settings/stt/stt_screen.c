@@ -5,15 +5,21 @@
 
 #include "stt_screen.h"
 
+#include <string.h>
+
 #include "ui_theme.h"
 
 #define STT_COLOR_GREEN 0x22C55E
 #define STT_COLOR_GREEN_DARK 0x14532D
 #define STT_COLOR_GREEN_SOFT 0x86EFAC
+#define STT_COLOR_PLAY_BLUE 0x2D7EE8
+#define STT_COLOR_PLAY_BLUE_DARK 0x1D4ED8
 
 #define STT_CONTAINER_WIDTH UI_THEME_CARD_WIDTH
-#define STT_CONTAINER_HEIGHT 260
-#define STT_BUTTON_SIZE 150
+#define STT_CONTAINER_HEIGHT 315
+#define STT_BUTTON_SIZE 132
+#define STT_PLAY_BUTTON_WIDTH 196
+#define STT_PLAY_BUTTON_HEIGHT 42
 #define STT_TEXT_WIDTH (UI_THEME_CARD_WIDTH - 44)
 
 typedef struct {
@@ -80,6 +86,20 @@ static void record_button_event_cb(lv_event_t *event)
     }
 }
 
+static void play_button_event_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED) {
+        return;
+    }
+
+    const ui_manager_callbacks_t *callbacks =
+        (const ui_manager_callbacks_t *)lv_event_get_user_data(event);
+
+    if (callbacks != NULL && callbacks->stt_play != NULL) {
+        callbacks->stt_play();
+    }
+}
+
 static lv_obj_t *create_centered_label(
     lv_obj_t *parent,
     const char *text,
@@ -96,6 +116,13 @@ static lv_obj_t *create_centered_label(
     return label;
 }
 
+static bool is_audio_playing(const ui_manager_state_t *state)
+{
+    return state != NULL &&
+        state->stt_processing &&
+        strcmp(state->stt_status, "Playing audio...") == 0;
+}
+
 void stt_screen_render(
     lv_obj_t *body,
     const ui_manager_state_t *state,
@@ -109,6 +136,8 @@ void stt_screen_render(
         status = state->stt_status[0] != '\0' ? state->stt_status : "Ready";
         result = state->stt_result;
     }
+
+    bool audio_playing = is_audio_playing(state);
 
     /*
      * STT intentionally fits inside the visible body and does not use the
@@ -125,7 +154,7 @@ void stt_screen_render(
     lv_obj_set_style_pad_right(container, 0, 0);
     lv_obj_set_style_pad_top(container, 0, 0);
     lv_obj_set_style_pad_bottom(container, 0, 0);
-    lv_obj_set_style_pad_gap(container, 10, 0);
+    lv_obj_set_style_pad_gap(container, 8, 0);
     lv_obj_set_scrollbar_mode(container, LV_SCROLLBAR_MODE_OFF);
     lv_obj_clear_flag(container, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(container, LV_FLEX_FLOW_COLUMN);
@@ -146,7 +175,7 @@ void stt_screen_render(
     }
 
     lv_obj_t *button_holder = lv_obj_create(container);
-    lv_obj_set_size(button_holder, STT_CONTAINER_WIDTH, 180);
+    lv_obj_set_size(button_holder, STT_CONTAINER_WIDTH, 142);
     lv_obj_set_style_bg_opa(button_holder, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(button_holder, 0, 0);
     lv_obj_set_style_pad_all(button_holder, 0, 0);
@@ -169,7 +198,7 @@ void stt_screen_render(
     lv_obj_set_scrollbar_mode(button, LV_SCROLLBAR_MODE_OFF);
     lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_align(button, LV_ALIGN_BOTTOM_MID, 0, -6);
+    lv_obj_align(button, LV_ALIGN_BOTTOM_MID, 0, -4);
 
     lv_obj_t *button_label = lv_label_create(button);
     lv_label_set_text(button_label, "Push\nto Talk");
@@ -186,4 +215,21 @@ void stt_screen_render(
     lv_obj_add_event_cb(button, record_button_event_cb, LV_EVENT_PRESSED, &s_button_context);
     lv_obj_add_event_cb(button, record_button_event_cb, LV_EVENT_RELEASED, &s_button_context);
     lv_obj_add_event_cb(button, record_button_event_cb, LV_EVENT_PRESS_LOST, &s_button_context);
+
+    lv_obj_t *play_button = lv_button_create(container);
+    lv_obj_set_size(play_button, STT_PLAY_BUTTON_WIDTH, STT_PLAY_BUTTON_HEIGHT);
+    lv_obj_set_style_radius(play_button, STT_PLAY_BUTTON_HEIGHT / 2, 0);
+    lv_obj_set_style_bg_color(play_button, lv_color_hex(STT_COLOR_PLAY_BLUE), 0);
+    lv_obj_set_style_bg_opa(play_button, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(play_button, lv_color_hex(STT_COLOR_PLAY_BLUE_DARK), 0);
+    lv_obj_set_style_border_width(play_button, 2, 0);
+    lv_obj_set_style_pad_all(play_button, 0, 0);
+    lv_obj_set_scrollbar_mode(play_button, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_clear_flag(play_button, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(play_button, play_button_event_cb, LV_EVENT_CLICKED, (void *)callbacks);
+
+    lv_obj_t *play_label = lv_label_create(play_button);
+    lv_label_set_text(play_label, audio_playing ? "Stop Audio" : "Play Audio");
+    lv_obj_set_style_text_color(play_label, lv_color_hex(UI_COLOR_TEXT), 0);
+    lv_obj_center(play_label);
 }

@@ -7,6 +7,7 @@ idf_component_register(
         "stt/stt_manager.c"
 
         "audio/audio_recorder.c"
+        "audio/audio_playback.c"
         "audio/wav_writer.c"
 
         "wifi/wifi_manager.c"
