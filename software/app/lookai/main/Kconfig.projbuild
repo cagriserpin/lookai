@@ -29,4 +29,38 @@ menu "LookAI"
             Optional ISO-639-1 language code for the input audio.
             Use an empty value to let the API auto-detect the language.
 
+    config LOOKAI_TTS_API_KEY
+        string "TTS API key"
+        default ""
+        help
+            Optional API key used by the LookAI TTS client.
+            Leave empty to reuse LOOKAI_STT_API_KEY for Groq.
+
+    config LOOKAI_TTS_ENDPOINT
+        string "TTS endpoint"
+        default "https://api.groq.com/openai/v1/audio/speech"
+        help
+            OpenAI-compatible audio speech endpoint.
+            Default value uses Groq's text-to-speech endpoint.
+
+    config LOOKAI_TTS_MODEL
+        string "TTS model"
+        default "canopylabs/orpheus-v1-english"
+        help
+            Text-to-speech model used by the TTS API client.
+            Groq currently supports canopylabs/orpheus-v1-english and canopylabs/orpheus-arabic-saudi.
+
+    config LOOKAI_TTS_VOICE
+        string "TTS voice"
+        default "hannah"
+        help
+            Voice persona ID used by the TTS API client.
+            English voices include autumn, diana, hannah, austin, daniel, and troy.
+
+    config LOOKAI_TTS_RESPONSE_FORMAT
+        string "TTS response format"
+        default "wav"
+        help
+            Audio response format for generated speech. Groq Orpheus currently supports wav.
+
 endmenu

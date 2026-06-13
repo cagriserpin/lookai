@@ -12,6 +12,7 @@
 #include "esp_log.h"
 
 #include "stt_manager.h"
+#include "tts_manager.h"
 #include "ui_manager.h"
 #include "wifi_manager.h"
 #include "wifi_storage.h"
@@ -59,6 +60,7 @@ esp_err_t app_controller_start(void)
     }
 
     ESP_RETURN_ON_ERROR(stt_manager_start(), TAG, "Failed to start STT manager");
+    ESP_RETURN_ON_ERROR(tts_manager_start(), TAG, "Failed to start TTS manager");
 
     ui_manager_callbacks_t callbacks = {
         .connect_another = wifi_manager_open_setup_portal,
@@ -69,6 +71,8 @@ esp_err_t app_controller_start(void)
         .stt_release = stt_manager_release,
         .stt_test_speaker = stt_manager_toggle_speaker_test,
         .stt_play_recording = stt_manager_play_recording,
+        .tts_sample_1 = tts_manager_speak_sample_1,
+        .tts_sample_2 = tts_manager_speak_sample_2,
     };
 
     ui_manager_set_callbacks(&callbacks);

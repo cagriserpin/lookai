@@ -7,9 +7,13 @@
 
 #include "lvgl.h"
 
+#include "ui_manager.h"
+
 /**
  * @brief Render the text-to-speech screen.
- *
- * This is UI-only for now. The sample cards are visual placeholders.
  */
-void tts_screen_render(lv_obj_t *body);
+void tts_screen_render(
+    lv_obj_t *body,
+    const ui_manager_state_t *state,
+    const ui_manager_callbacks_t *callbacks
+);

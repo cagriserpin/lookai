@@ -49,6 +49,9 @@ static ui_manager_state_t s_state = {
     .stt_processing = false,
     .stt_speaker_test_active = false,
     .stt_recording_playback_active = false,
+    .tts_status = "Ready",
+    .tts_result = "Select a sample text.",
+    .tts_busy = false,
     .saved_items_count = 0,
 };
 
@@ -304,7 +307,11 @@ static void render_body_unlocked(lv_obj_t *body)
             &s_callbacks
         );
     } else if (screen_id == MENU_SCREEN_TTS) {
-        tts_screen_render(body);
+        tts_screen_render(
+            body,
+            &s_state,
+            &s_callbacks
+        );
     } else {
         manage_networks_screen_render(
             body,
@@ -554,6 +561,41 @@ void ui_manager_update_stt_status(
             return;
         }
 
+        render_body_only_locked();
+    }
+}
+
+
+void ui_manager_update_tts_status(
+    const char *status,
+    const char *result,
+    bool busy
+)
+{
+    bool changed = false;
+
+    if (status != NULL && strcmp(s_state.tts_status, status) != 0) {
+        strncpy(s_state.tts_status, status, sizeof(s_state.tts_status) - 1);
+        s_state.tts_status[sizeof(s_state.tts_status) - 1] = '\0';
+        changed = true;
+    }
+
+    if (result != NULL && strcmp(s_state.tts_result, result) != 0) {
+        strncpy(s_state.tts_result, result, sizeof(s_state.tts_result) - 1);
+        s_state.tts_result[sizeof(s_state.tts_result) - 1] = '\0';
+        changed = true;
+    }
+
+    if (s_state.tts_busy != busy) {
+        s_state.tts_busy = busy;
+        changed = true;
+    }
+
+    if (!changed) {
+        return;
+    }
+
+    if (menu_controller_current(&s_menu) == MENU_SCREEN_TTS) {
         render_body_only_locked();
     }
 }

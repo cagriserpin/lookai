@@ -33,6 +33,8 @@ typedef struct {
     ui_manager_action_cb_t stt_release;           /**< Stop push-to-talk recording flow. */
     ui_manager_action_cb_t stt_test_speaker;      /**< Toggle the 440 Hz speaker test tone. */
     ui_manager_action_cb_t stt_play_recording;    /**< Play the last saved recording. */
+    ui_manager_action_cb_t tts_sample_1;          /**< Generate and play the first TTS sample. */
+    ui_manager_action_cb_t tts_sample_2;          /**< Generate and play the second TTS sample. */
 } ui_manager_callbacks_t;
 
 /**
@@ -59,6 +61,9 @@ typedef struct {
     bool stt_processing;                                                   /**< True while fake/real STT processing is running. */
     bool stt_speaker_test_active;                                          /**< True while the speaker test tone is playing. */
     bool stt_recording_playback_active;                                    /**< True while the saved recording is playing. */
+    char tts_status[64];                                                   /**< Text-to-speech state label. */
+    char tts_result[256];                                                  /**< Latest text-to-speech status/result text. */
+    bool tts_busy;                                                         /**< True while TTS generation or playback is active. */
     ui_manager_saved_network_t saved_items[UI_MANAGER_MAX_SAVED_NETWORKS]; /**< Saved networks shown in UI. */
     int saved_items_count;                                                 /**< Number of saved items. */
 } ui_manager_state_t;
@@ -90,4 +95,10 @@ void ui_manager_update_stt_status(
     bool processing,
     bool speaker_test_active,
     bool recording_playback_active
+);
+
+void ui_manager_update_tts_status(
+    const char *status,
+    const char *result,
+    bool busy
 );

@@ -5,6 +5,8 @@
 
 #include "tts_screen.h"
 
+#include <stdio.h>
+
 #include "ui_card.h"
 #include "ui_theme.h"
 
@@ -24,11 +26,63 @@ static void style_plain_container(lv_obj_t *obj)
     lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
 }
 
-static lv_obj_t *create_status_label(lv_obj_t *parent)
+static void set_card_enabled(lv_obj_t *card, bool enabled)
+{
+    if (card == NULL) {
+        return;
+    }
+
+    if (enabled) {
+        lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_opa(card, LV_OPA_COVER, 0);
+    } else {
+        lv_obj_clear_flag(card, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_opa(card, LV_OPA_40, 0);
+    }
+}
+
+static void sample_1_event_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED) {
+        return;
+    }
+
+    const ui_manager_callbacks_t *callbacks =
+        (const ui_manager_callbacks_t *)lv_event_get_user_data(event);
+
+    if (callbacks != NULL && callbacks->tts_sample_1 != NULL) {
+        callbacks->tts_sample_1();
+    }
+}
+
+static void sample_2_event_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED) {
+        return;
+    }
+
+    const ui_manager_callbacks_t *callbacks =
+        (const ui_manager_callbacks_t *)lv_event_get_user_data(event);
+
+    if (callbacks != NULL && callbacks->tts_sample_2 != NULL) {
+        callbacks->tts_sample_2();
+    }
+}
+
+static lv_obj_t *create_status_label(lv_obj_t *parent, const char *status, const char *result)
 {
     lv_obj_t *label = lv_label_create(parent);
 
-    lv_label_set_text(label, "Ready\nSelect a sample text.");
+    char text[320];
+    snprintf(
+        text,
+        sizeof(text),
+        "%s\n%s",
+        status != NULL && status[0] != '\0' ? status : "Ready",
+        result != NULL && result[0] != '\0' ? result : "Select a sample text."
+    );
+
+    lv_label_set_text(label, text);
     lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(label, TTS_STATUS_WIDTH);
     lv_obj_set_style_text_color(label, lv_color_hex(UI_COLOR_TEXT), 0);
@@ -38,7 +92,12 @@ static lv_obj_t *create_status_label(lv_obj_t *parent)
     return label;
 }
 
-static lv_obj_t *create_sample_card(lv_obj_t *parent, const char *text)
+static lv_obj_t *create_sample_card(
+    lv_obj_t *parent,
+    const char *text,
+    lv_event_cb_t cb,
+    const ui_manager_callbacks_t *callbacks
+)
 {
     lv_obj_t *card = ui_card_create(parent);
 
@@ -57,6 +116,10 @@ static lv_obj_t *create_sample_card(lv_obj_t *parent, const char *text)
     );
     lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
 
+    if (cb != NULL) {
+        lv_obj_add_event_cb(card, cb, LV_EVENT_CLICKED, (void *)callbacks);
+    }
+
     lv_obj_t *label = lv_label_create(card);
     lv_label_set_text(label, text != NULL ? text : "");
     lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
@@ -67,10 +130,24 @@ static lv_obj_t *create_sample_card(lv_obj_t *parent, const char *text)
     return card;
 }
 
-void tts_screen_render(lv_obj_t *body)
+void tts_screen_render(
+    lv_obj_t *body,
+    const ui_manager_state_t *state,
+    const ui_manager_callbacks_t *callbacks
+)
 {
+    const char *status = "Ready";
+    const char *result = "Select a sample text.";
+    bool busy = false;
+
+    if (state != NULL) {
+        status = state->tts_status[0] != '\0' ? state->tts_status : "Ready";
+        result = state->tts_result;
+        busy = state->tts_busy;
+    }
+
     /*
-     * TTS page is also fixed for now. It has status text and two sample cards.
+     * TTS page is fixed. It has status text and two sample cards.
      */
     lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_scroll_dir(body, LV_DIR_NONE);
@@ -89,15 +166,22 @@ void tts_screen_render(lv_obj_t *body)
     );
     lv_obj_set_style_pad_gap(container, 18, 0);
 
-    create_status_label(container);
+    create_status_label(container, status, result);
 
-    create_sample_card(
+    lv_obj_t *sample_1 = create_sample_card(
         container,
-        "Merhaba! Ben LookAI"
+        "Merhaba! Ben LookAI",
+        sample_1_event_cb,
+        callbacks
     );
 
-    create_sample_card(
+    lv_obj_t *sample_2 = create_sample_card(
         container,
-        "Sana nasil yardimci olabilirim?"
+        "I can speak using Groq TTS.",
+        sample_2_event_cb,
+        callbacks
     );
+
+    set_card_enabled(sample_1, !busy);
+    set_card_enabled(sample_2, !busy);
 }

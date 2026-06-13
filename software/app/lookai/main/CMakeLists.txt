@@ -7,6 +7,9 @@ idf_component_register(
         "stt/stt_manager.c"
         "stt/stt_api_client.c"
 
+        "tts/tts_manager.c"
+        "tts/tts_api_client.c"
+
         "audio/audio_recorder.c"
         "audio/audio_playback.c"
         "audio/wav_writer.c"
@@ -42,6 +45,7 @@ idf_component_register(
         "."
         "app"
         "stt"
+        "tts"
         "audio"
         "wifi"
         "portal"
