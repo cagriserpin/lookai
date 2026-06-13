@@ -6,6 +6,9 @@ idf_component_register(
 
         "stt/stt_manager.c"
 
+        "audio/audio_recorder.c"
+        "audio/wav_writer.c"
+
         "wifi/wifi_manager.c"
         "wifi/wifi_ap.c"
         "wifi/wifi_storage.c"
@@ -36,6 +39,7 @@ idf_component_register(
         "."
         "app"
         "stt"
+        "audio"
         "wifi"
         "portal"
         "ui"
@@ -54,4 +58,7 @@ idf_component_register(
         nvs_flash
         esp_http_server
         lwip
+        esp_codec_dev
+        driver
+        spiffs
 )

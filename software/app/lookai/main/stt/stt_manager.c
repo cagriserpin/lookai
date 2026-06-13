@@ -5,7 +5,10 @@
 
 #include "stt_manager.h"
 
+#include "audio_recorder.h"
 #include "esp_log.h"
+
+#include <stdio.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -17,7 +20,6 @@ static const char *TAG = "stt_manager";
 
 #define STT_EVENT_QUEUE_LEN 8
 #define STT_TASK_STACK_SIZE 4096
-#define STT_FAKE_PROCESSING_MS 1500
 
 typedef enum {
     STT_MANAGER_EVENT_PRESS = 0,
@@ -55,6 +57,22 @@ void stt_manager_release(void)
     post_event(STT_MANAGER_EVENT_RELEASE);
 }
 
+static void set_error_status(const char *message, esp_err_t err)
+{
+    char result[192];
+
+    snprintf(
+        result,
+        sizeof(result),
+        "%s\n%s",
+        message != NULL ? message : "Recorder error",
+        esp_err_to_name(err)
+    );
+
+    s_state = STT_MANAGER_STATE_ERROR;
+    ui_manager_update_stt_status("Record error", result, false, false);
+}
+
 static void handle_press(void)
 {
     if (s_state == STT_MANAGER_STATE_PROCESSING) {
@@ -65,13 +83,18 @@ static void handle_press(void)
     ESP_LOGI(TAG, "Push to Talk pressed");
 
     /*
-     * Do not repaint the STT screen here.
-     *
-     * If the screen is deleted/recreated while the finger is still pressing the
-     * button, LVGL can lose the matching RELEASED event. That made the flow feel
-     * like "tap once to record, tap again to process". The release event must be
-     * delivered to the same button object.
+     * Start the real recorder, but do not repaint the STT screen from here.
+     * The UI updates "Recording..." locally while the user is still holding
+     * the same LVGL button object. Re-rendering on press can cause LVGL to lose
+     * the matching RELEASED event.
      */
+    esp_err_t err = audio_recorder_start();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start audio recorder: %s", esp_err_to_name(err));
+        set_error_status("Could not start recording.", err);
+        return;
+    }
+
     s_state = STT_MANAGER_STATE_RECORDING;
 }
 
@@ -85,19 +108,34 @@ static void handle_release(void)
     ESP_LOGI(TAG, "Push to Talk released");
 
     s_state = STT_MANAGER_STATE_PROCESSING;
-    ui_manager_update_stt_status("Processing...", "", false, true);
+    ui_manager_update_stt_status("Saving...", "", false, true);
 
-    /*
-     * Stage 2 only: fake processing result.
-     * The real audio recorder + WAV builder + cloud/client STT will replace
-     * this delay/result in the next implementation stage.
-     */
-    vTaskDelay(pdMS_TO_TICKS(STT_FAKE_PROCESSING_MS));
+    audio_recorder_result_t result = {0};
+    esp_err_t err = audio_recorder_stop(&result);
+
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to stop audio recorder: %s", esp_err_to_name(err));
+        set_error_status("Could not save recording.", err);
+        return;
+    }
+
+    float seconds = (float)result.duration_ms / 1000.0f;
+    float kb = (float)result.wav_bytes / 1024.0f;
+
+    char details[256];
+    snprintf(
+        details,
+        sizeof(details),
+        "Saved: %s\nLength: %.1f sec\nSize: %.1f KB",
+        result.path,
+        seconds,
+        kb
+    );
 
     s_state = STT_MANAGER_STATE_DONE;
     ui_manager_update_stt_status(
-        "Done",
-        "Fake transcript: audio backend will be connected next.",
+        "Recording saved",
+        details,
         false,
         false
     );
