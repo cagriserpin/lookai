@@ -1,0 +1,32 @@
+menu "LookAI"
+
+    config LOOKAI_STT_API_KEY
+        string "STT API key"
+        default ""
+        help
+            API key used by the LookAI STT client.
+            For Groq, paste your Groq API key here.
+            Keep this private. Do not print this value in logs.
+
+    config LOOKAI_STT_ENDPOINT
+        string "STT endpoint"
+        default "https://api.groq.com/openai/v1/audio/transcriptions"
+        help
+            OpenAI-compatible audio transcription endpoint.
+            Default value uses Groq's OpenAI-compatible transcription endpoint.
+
+    config LOOKAI_STT_MODEL
+        string "STT model"
+        default "whisper-large-v3-turbo"
+        help
+            Audio transcription model used by the STT API client.
+            For Groq, use whisper-large-v3-turbo or whisper-large-v3.
+
+    config LOOKAI_STT_LANGUAGE
+        string "STT language code"
+        default "tr"
+        help
+            Optional ISO-639-1 language code for the input audio.
+            Use an empty value to let the API auto-detect the language.
+
+endmenu

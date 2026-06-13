@@ -26,7 +26,7 @@ static const char *TAG = "wifi_ap";
 #define WIFI_AP_MAX_CONN  4
 
 #define WIFI_STA_MAX_RETRY 5
-#define WIFI_SCAN_TASK_STACK_SIZE 6144
+#define WIFI_SCAN_TASK_STACK_SIZE 4096
 
 static esp_netif_t *s_ap_netif = NULL;
 static esp_netif_t *s_sta_netif = NULL;

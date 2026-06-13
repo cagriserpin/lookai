@@ -5,6 +5,7 @@ idf_component_register(
         "app/app_controller.c"
 
         "stt/stt_manager.c"
+        "stt/stt_api_client.c"
 
         "audio/audio_recorder.c"
         "audio/audio_playback.c"
@@ -62,4 +63,7 @@ idf_component_register(
         esp_codec_dev
         driver
         spiffs
+        json
+        esp-tls
+        esp_http_client
 )

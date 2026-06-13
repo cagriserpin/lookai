@@ -28,6 +28,15 @@ static const char *TAG = "main";
 #define RECONNECT_WAIT_SECONDS 20
 #define APP_EVENT_QUEUE_LEN 16
 
+#define WIFI_MANAGER_APP_EVENT_TASK_STACK_SIZE 4096
+#define WIFI_MANAGER_BOOT_TASK_STACK_SIZE 6144
+#define WIFI_MANAGER_CLOSE_SETUP_TASK_STACK_SIZE 3072
+#define WIFI_MANAGER_CONNECT_SAVED_TASK_STACK_SIZE 6144
+#define WIFI_MANAGER_RECONNECT_TASK_STACK_SIZE 6144
+#define WIFI_MANAGER_PORTAL_CONNECT_TASK_STACK_SIZE 8192
+#define WIFI_MANAGER_START_SETUP_TASK_STACK_SIZE 4096
+#define WIFI_MANAGER_CONNECT_ANOTHER_TASK_STACK_SIZE 4096
+
 typedef enum {
     APP_EVENT_WIFI,
 } app_event_type_t;
@@ -231,7 +240,7 @@ static void schedule_close_setup_portal(void)
         return;
     }
 
-    xTaskCreate(close_setup_portal_task, "close_setup", 4096, NULL, 5, &s_close_setup_task_handle);
+    xTaskCreate(close_setup_portal_task, "close_setup", WIFI_MANAGER_CLOSE_SETUP_TASK_STACK_SIZE, NULL, 5, &s_close_setup_task_handle);
 }
 
 static void start_setup_portal_task(void *arg)
@@ -248,7 +257,7 @@ static void schedule_start_setup_portal(void)
         return;
     }
 
-    xTaskCreate(start_setup_portal_task, "start_setup", 6144, NULL, 5, &s_start_setup_task_handle);
+    xTaskCreate(start_setup_portal_task, "start_setup", WIFI_MANAGER_START_SETUP_TASK_STACK_SIZE, NULL, 5, &s_start_setup_task_handle);
 }
 
 static void connect_another_network_task(void *arg)
@@ -299,7 +308,7 @@ static void on_connect_another_pressed(void)
         return;
     }
 
-    xTaskCreate(connect_another_network_task, "connect_another", 6144, NULL, 5, &s_connect_another_task_handle);
+    xTaskCreate(connect_another_network_task, "connect_another", WIFI_MANAGER_CONNECT_ANOTHER_TASK_STACK_SIZE, NULL, 5, &s_connect_another_task_handle);
 }
 
 static void connect_saved_task(void *arg)
@@ -337,7 +346,7 @@ static void on_connect_saved_network(const char *ssid)
 
     strncpy(request->ssid, ssid, sizeof(request->ssid) - 1);
 
-    xTaskCreate(connect_saved_task, "connect_saved", 8192, request, 5, NULL);
+    xTaskCreate(connect_saved_task, "connect_saved", WIFI_MANAGER_CONNECT_SAVED_TASK_STACK_SIZE, request, 5, NULL);
 }
 
 static void forget_saved_task(void *arg)
@@ -446,7 +455,7 @@ static void schedule_reconnect_task(void)
         return;
     }
 
-    xTaskCreate(reconnect_task, "reconnect_task", 8192, NULL, 5, &s_reconnect_task_handle);
+    xTaskCreate(reconnect_task, "reconnect_task", WIFI_MANAGER_RECONNECT_TASK_STACK_SIZE, NULL, 5, &s_reconnect_task_handle);
 }
 
 /*
@@ -509,8 +518,19 @@ static void handle_wifi_event(wifi_ap_event_t event)
         s_manual_setup_requested = false;
 
         save_pending_credentials_if_needed();
-        update_wifi_status("Connected");
-        schedule_close_setup_portal();
+
+        /*
+         * If the setup portal is still running, do not repaint the UI right at
+         * GOT_IP time. SoftAP + HTTP portal + DNS + Wi-Fi buffers put pressure
+         * on DMA-capable internal RAM, and an immediate LVGL flush can fail with
+         * spi_master ESP_ERR_NO_MEM. The delayed close task stops the portal/AP
+         * first, then updates the UI to Connected.
+         */
+        if (s_setup_portal_active) {
+            schedule_close_setup_portal();
+        } else {
+            update_wifi_status("Connected");
+        }
     }
 
     if (event == WIFI_AP_EVENT_STA_FAILED) {
@@ -619,7 +639,7 @@ static void on_portal_connect_request(const char *ssid, const char *password)
     strncpy(request->ssid, ssid, sizeof(request->ssid) - 1);
     strncpy(request->password, password != NULL ? password : "", sizeof(request->password) - 1);
 
-    BaseType_t ok = xTaskCreate(portal_connect_task, "portal_connect", 12288, request, 5, &s_portal_connect_task_handle);
+    BaseType_t ok = xTaskCreate(portal_connect_task, "portal_connect", WIFI_MANAGER_PORTAL_CONNECT_TASK_STACK_SIZE, request, 5, &s_portal_connect_task_handle);
 
     if (ok != pdPASS) {
         ESP_LOGE(TAG, "Failed to create portal connect task");
@@ -821,7 +841,7 @@ esp_err_t wifi_manager_start(void)
     BaseType_t ok = xTaskCreate(
         app_event_task,
         "app_event",
-        12288,
+        WIFI_MANAGER_APP_EVENT_TASK_STACK_SIZE,
         NULL,
         5,
         &s_app_event_task_handle
@@ -840,7 +860,7 @@ esp_err_t wifi_manager_start(void)
     ok = xTaskCreate(
         boot_wifi_task,
         "boot_wifi",
-        8192,
+        WIFI_MANAGER_BOOT_TASK_STACK_SIZE,
         NULL,
         5,
         &s_boot_wifi_task_handle
@@ -852,4 +872,9 @@ esp_err_t wifi_manager_start(void)
     }
 
     return ESP_OK;
+}
+
+bool wifi_manager_is_connected(void)
+{
+    return wifi_ap_is_sta_connected();
 }

@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include <stdbool.h>
+
 #include "esp_err.h"
 
 /**
@@ -43,3 +45,8 @@ void wifi_manager_connect_saved_network(const char *ssid);
  * @param ssid Saved SSID to remove.
  */
 void wifi_manager_forget_saved_network(const char *ssid);
+
+/**
+ * @brief Return true when the station interface is connected to Wi-Fi.
+ */
+bool wifi_manager_is_connected(void);

@@ -584,5 +584,12 @@ void ui_manager_set_saved_networks(
         s_state.saved_items[i].connected = items[i].connected;
     }
 
-    render_body_only_locked();
+    /*
+     * Saved item contents only affect the saved-networks screen. Rendering the
+     * current body on every cache update caused extra display flushes during
+     * Wi-Fi connect events, exactly when internal DMA-capable memory is tight.
+     */
+    if (menu_controller_current(&s_menu) == MENU_SCREEN_SAVED_NETWORKS) {
+        render_body_only_locked();
+    }
 }

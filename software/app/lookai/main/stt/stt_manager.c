@@ -8,31 +8,41 @@
 #include "audio_playback.h"
 #include "audio_recorder.h"
 #include "esp_log.h"
+#include "stt_api_client.h"
+#include "ui_manager.h"
+#include "wifi_manager.h"
 
+#include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
 
-#include "ui_manager.h"
-
 static const char *TAG = "stt_manager";
 
 #define STT_EVENT_QUEUE_LEN 8
-#define STT_TASK_STACK_SIZE 10240
+#define STT_TASK_STACK_SIZE 6144
+#define STT_TRANSCRIBE_TASK_STACK_SIZE 12288
+#define STT_TRANSCRIBE_TASK_PRIORITY 4
+#define STT_TRANSCRIBE_START_DELAY_MS 500
+#define STT_TRANSCRIPT_BUFFER_SIZE 256
+#define STT_PATH_BUFFER_SIZE 96
 
 typedef enum {
     STT_MANAGER_EVENT_PRESS = 0,
     STT_MANAGER_EVENT_RELEASE,
     STT_MANAGER_EVENT_TOGGLE_SPEAKER_TEST,
     STT_MANAGER_EVENT_PLAY_RECORDING,
+    STT_MANAGER_EVENT_TRANSCRIBE_DONE,
 } stt_manager_event_t;
 
 typedef enum {
     STT_MANAGER_STATE_READY = 0,
     STT_MANAGER_STATE_RECORDING,
     STT_MANAGER_STATE_PROCESSING,
+    STT_MANAGER_STATE_TRANSCRIBING,
     STT_MANAGER_STATE_SPEAKER_TEST,
     STT_MANAGER_STATE_PLAYING_RECORDING,
     STT_MANAGER_STATE_DONE,
@@ -41,7 +51,13 @@ typedef enum {
 
 static QueueHandle_t s_stt_event_queue = NULL;
 static TaskHandle_t s_stt_task_handle = NULL;
+static TaskHandle_t s_transcribe_task_handle = NULL;
+
 static stt_manager_state_t s_state = STT_MANAGER_STATE_READY;
+
+static char s_transcribe_path[STT_PATH_BUFFER_SIZE] = {0};
+static char s_transcribe_result[STT_TRANSCRIPT_BUFFER_SIZE] = {0};
+static bool s_transcribe_success = false;
 
 static void update_stt_ui(
     const char *status,
@@ -60,6 +76,15 @@ static void update_stt_ui(
         speaker_test_active,
         recording_playback_active
     );
+}
+
+static bool is_busy_for_new_action(void)
+{
+    return
+        s_state == STT_MANAGER_STATE_PROCESSING ||
+        s_state == STT_MANAGER_STATE_TRANSCRIBING ||
+        s_state == STT_MANAGER_STATE_SPEAKER_TEST ||
+        s_state == STT_MANAGER_STATE_PLAYING_RECORDING;
 }
 
 static void post_event(stt_manager_event_t event)
@@ -91,6 +116,20 @@ void stt_manager_play_recording(void)
     post_event(STT_MANAGER_EVENT_PLAY_RECORDING);
 }
 
+static void set_error_message(const char *status, const char *message)
+{
+    s_state = STT_MANAGER_STATE_ERROR;
+
+    update_stt_ui(
+        status != NULL ? status : "STT error",
+        message != NULL ? message : "Unknown error.",
+        false,
+        false,
+        false,
+        false
+    );
+}
+
 static void set_error_status(const char *message, esp_err_t err)
 {
     char result[192];
@@ -103,17 +142,54 @@ static void set_error_status(const char *message, esp_err_t err)
         esp_err_to_name(err)
     );
 
-    s_state = STT_MANAGER_STATE_ERROR;
-    update_stt_ui("Audio error", result, false, false, false, false);
+    set_error_message("STT error", result);
+}
+
+static void transcribe_task(void *arg)
+{
+    (void)arg;
+
+    char transcript[STT_TRANSCRIPT_BUFFER_SIZE] = {0};
+
+    ESP_LOGI(TAG, "Starting STT transcription task");
+
+    esp_err_t err = stt_api_client_transcribe_wav(
+        s_transcribe_path,
+        transcript,
+        sizeof(transcript)
+    );
+
+    if (err == ESP_OK) {
+        s_transcribe_success = true;
+        snprintf(
+            s_transcribe_result,
+            sizeof(s_transcribe_result),
+            "%s",
+            transcript
+        );
+    } else {
+        const char *api_error = stt_api_client_get_last_error();
+
+        s_transcribe_success = false;
+        snprintf(
+            s_transcribe_result,
+            sizeof(s_transcribe_result),
+            "%s",
+            api_error != NULL ? api_error : "Transcription failed."
+        );
+
+        ESP_LOGE(TAG, "STT transcription failed: %s", esp_err_to_name(err));
+    }
+
+    s_transcribe_task_handle = NULL;
+    post_event(STT_MANAGER_EVENT_TRANSCRIBE_DONE);
+
+    vTaskDelete(NULL);
 }
 
 static void handle_press(void)
 {
-    if (
-        s_state == STT_MANAGER_STATE_PROCESSING ||
-        s_state == STT_MANAGER_STATE_SPEAKER_TEST ||
-        s_state == STT_MANAGER_STATE_PLAYING_RECORDING
-    ) {
+    if (is_busy_for_new_action()) {
         ESP_LOGI(TAG, "Ignoring TALK press while STT/audio is busy");
         return;
     }
@@ -136,6 +212,62 @@ static void handle_press(void)
     s_state = STT_MANAGER_STATE_RECORDING;
 }
 
+static void start_transcription_for_path(const char *path)
+{
+    if (path == NULL || path[0] == '\0') {
+        set_error_message("STT error", "Recording path is missing.");
+        return;
+    }
+
+    if (!wifi_manager_is_connected()) {
+        ESP_LOGW(TAG, "Cannot transcribe because Wi-Fi is not connected");
+        set_error_message("No Wi-Fi", "Connect to Wi-Fi first.");
+        return;
+    }
+
+    if (s_transcribe_task_handle != NULL) {
+        ESP_LOGW(TAG, "Transcription task is already running");
+        set_error_message("STT error", "Transcription is already running.");
+        return;
+    }
+
+    snprintf(s_transcribe_path, sizeof(s_transcribe_path), "%s", path);
+    s_transcribe_result[0] = '\0';
+    s_transcribe_success = false;
+
+    s_state = STT_MANAGER_STATE_TRANSCRIBING;
+    update_stt_ui(
+        "Transcribing",
+        "Sending audio to STT.",
+        false,
+        true,
+        false,
+        false
+    );
+
+    /*
+     * The display driver needs DMA-capable internal RAM for SPI flushes.
+     * Give LVGL a short window to draw the "Transcribing" state before the
+     * temporary HTTP/TLS task allocates its stack and starts TLS setup.
+     */
+    vTaskDelay(pdMS_TO_TICKS(STT_TRANSCRIBE_START_DELAY_MS));
+
+    BaseType_t ok = xTaskCreate(
+        transcribe_task,
+        "stt_transcribe",
+        STT_TRANSCRIBE_TASK_STACK_SIZE,
+        NULL,
+        STT_TRANSCRIBE_TASK_PRIORITY,
+        &s_transcribe_task_handle
+    );
+
+    if (ok != pdPASS) {
+        s_transcribe_task_handle = NULL;
+        ESP_LOGE(TAG, "Failed to create STT transcription task");
+        set_error_message("STT error", "Could not start transcription task.");
+    }
+}
+
 static void handle_release(void)
 {
     if (s_state != STT_MANAGER_STATE_RECORDING) {
@@ -146,7 +278,7 @@ static void handle_release(void)
     ESP_LOGI(TAG, "TALK released");
 
     s_state = STT_MANAGER_STATE_PROCESSING;
-    update_stt_ui("Saving...", "", false, true, false, false);
+    update_stt_ui("Saving", "Preparing recording.", false, true, false, false);
 
     audio_recorder_result_t result = {0};
     esp_err_t err = audio_recorder_stop(&result);
@@ -157,22 +289,44 @@ static void handle_release(void)
         return;
     }
 
-    float seconds = (float)result.duration_ms / 1000.0f;
-    float kb = (float)result.wav_bytes / 1024.0f;
+    const char *path = result.path[0] != '\0' ? result.path : audio_recorder_get_path();
+    start_transcription_for_path(path);
+}
 
-    char details[256];
-    snprintf(
-        details,
-        sizeof(details),
-        "Saved recording\nLength: %.1f sec\nSize: %.1f KB",
-        seconds,
-        kb
-    );
+static void handle_transcribe_done(void)
+{
+    if (s_state != STT_MANAGER_STATE_TRANSCRIBING) {
+        ESP_LOGI(TAG, "Ignoring transcription result because STT is not transcribing");
+        return;
+    }
+
+    if (!s_transcribe_success) {
+        set_error_message(
+            "STT error",
+            s_transcribe_result[0] != '\0' ?
+                s_transcribe_result :
+                "Transcription failed."
+        );
+        return;
+    }
+
+    if (s_transcribe_result[0] == '\0') {
+        s_state = STT_MANAGER_STATE_DONE;
+        update_stt_ui(
+            "Transcript empty",
+            "No speech was recognized.",
+            false,
+            false,
+            false,
+            false
+        );
+        return;
+    }
 
     s_state = STT_MANAGER_STATE_DONE;
     update_stt_ui(
-        "Recording saved",
-        details,
+        "Transcript ready",
+        s_transcribe_result,
         false,
         false,
         false,
@@ -187,7 +341,11 @@ static void handle_toggle_speaker_test(void)
         return;
     }
 
-    if (s_state == STT_MANAGER_STATE_PROCESSING || s_state == STT_MANAGER_STATE_PLAYING_RECORDING) {
+    if (
+        s_state == STT_MANAGER_STATE_PROCESSING ||
+        s_state == STT_MANAGER_STATE_TRANSCRIBING ||
+        s_state == STT_MANAGER_STATE_PLAYING_RECORDING
+    ) {
         ESP_LOGI(TAG, "Ignoring speaker test while busy");
         return;
     }
@@ -196,8 +354,8 @@ static void handle_toggle_speaker_test(void)
         ESP_LOGI(TAG, "Stopping 440 Hz speaker test");
 
         update_stt_ui(
-            "Stopping speaker...",
-            "Stopping 440 Hz test tone.",
+            "Stopping",
+            "Stopping speaker test.",
             false,
             true,
             true,
@@ -213,8 +371,8 @@ static void handle_toggle_speaker_test(void)
 
         s_state = STT_MANAGER_STATE_DONE;
         update_stt_ui(
-            "Speaker test stopped",
-            "440 Hz test tone stopped.",
+            "Ready",
+            "Hold TALK to record.",
             false,
             false,
             false,
@@ -234,8 +392,8 @@ static void handle_toggle_speaker_test(void)
 
     s_state = STT_MANAGER_STATE_SPEAKER_TEST;
     update_stt_ui(
-        "Testing speaker...",
-        "440 Hz test tone is playing.",
+        "Testing",
+        "Speaker test is playing.",
         false,
         false,
         true,
@@ -252,6 +410,7 @@ static void handle_play_recording(void)
 
     if (
         s_state == STT_MANAGER_STATE_PROCESSING ||
+        s_state == STT_MANAGER_STATE_TRANSCRIBING ||
         s_state == STT_MANAGER_STATE_SPEAKER_TEST ||
         s_state == STT_MANAGER_STATE_PLAYING_RECORDING
     ) {
@@ -265,8 +424,8 @@ static void handle_play_recording(void)
 
     s_state = STT_MANAGER_STATE_PLAYING_RECORDING;
     update_stt_ui(
-        "Playing recording...",
-        "Playing saved microphone recording.",
+        "Playing",
+        "Playing recording.",
         false,
         false,
         false,
@@ -311,7 +470,7 @@ static void stt_task(void *arg)
 
     stt_manager_event_t event;
 
-    update_stt_ui("Ready", "", false, false, false, false);
+    update_stt_ui("Ready", "Hold TALK to record.", false, false, false, false);
 
     while (true) {
         if (xQueueReceive(s_stt_event_queue, &event, portMAX_DELAY) != pdTRUE) {
@@ -333,6 +492,10 @@ static void stt_task(void *arg)
 
             case STT_MANAGER_EVENT_PLAY_RECORDING:
                 handle_play_recording();
+                break;
+
+            case STT_MANAGER_EVENT_TRANSCRIBE_DONE:
+                handle_transcribe_done();
                 break;
 
             default:
