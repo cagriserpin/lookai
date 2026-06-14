@@ -333,13 +333,20 @@ static lv_obj_t *create_body(lv_obj_t *screen, bool show_bottom_slice)
         lv_obj_align(body, LV_ALIGN_TOP_MID, 0, UI_THEME_SLICE_SIZE);
     }
 
-    lv_obj_set_style_bg_opa(body, LV_OPA_TRANSP, 0);
+    /*
+     * The body is visually the same color as the screen. Making it opaque
+     * avoids transparent-background blending while scrolling dense text rows.
+     */
+    lv_obj_set_style_bg_color(body, lv_color_hex(UI_COLOR_BG), 0);
+    lv_obj_set_style_bg_opa(body, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(body, 0, 0);
     lv_obj_set_style_pad_all(body, 8, 0);
     lv_obj_set_style_pad_right(body, UI_THEME_BODY_RIGHT_SCROLL_PADDING, 0);
     lv_obj_set_style_pad_gap(body, 12, 0);
     lv_obj_set_scroll_dir(body, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_clear_flag(body, LV_OBJ_FLAG_SCROLL_ELASTIC);
+    lv_obj_clear_flag(body, LV_OBJ_FLAG_SCROLL_MOMENTUM);
     lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(
         body,

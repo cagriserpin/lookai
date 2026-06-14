@@ -22,7 +22,7 @@ static void create_text_icon(lv_obj_t *icon_circle, const char *text)
 {
     lv_obj_t *icon = lv_label_create(icon_circle);
 
-    lv_label_set_text(icon, text != NULL ? text : "");
+    lv_label_set_text_static(icon, text != NULL ? text : "");
     lv_obj_set_style_text_font(icon, UI_SETTINGS_ITEM_ICON_FONT, 0);
     lv_obj_set_style_text_color(icon, lv_color_hex(UI_COLOR_TEXT), 0);
     lv_obj_center(icon);
@@ -38,7 +38,7 @@ static void create_sun_icon(lv_obj_t *icon_circle)
 {
     lv_obj_t *icon = lv_label_create(icon_circle);
 
-    lv_label_set_text(icon, UI_SYMBOL_SUN);
+    lv_label_set_text_static(icon, UI_SYMBOL_SUN);
     lv_obj_set_style_text_font(icon, &lookai_symbols, 0);
     lv_obj_set_style_text_color(icon, lv_color_hex(UI_COLOR_TEXT), 0);
     lv_obj_center(icon);
@@ -55,25 +55,21 @@ lv_obj_t *ui_settings_item_create(
     uint32_t icon_color = icon_config != NULL ? icon_config->color : UI_COLOR_SECONDARY;
 
     /*
-     * Settings items are intentionally invisible rows. The row itself is still
-     * clickable, but there is no card background. Separators are owned by the
-     * screen that lays out the menu so lines appear between items.
+     * Keep the visual row exactly the same, but avoid a nested flex layout and
+     * transparent-row blending on every scroll frame. The central body is a
+     * uniform dark color, so an opaque row with the same color is visually
+     * identical while being cheaper for LVGL's software renderer.
      */
     lv_obj_t *item = lv_obj_create(parent);
 
     lv_obj_set_size(item, UI_THEME_BUTTON_WIDTH, UI_THEME_SETTINGS_ITEM_HEIGHT);
-    lv_obj_set_style_bg_opa(item, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_bg_color(item, lv_color_hex(UI_COLOR_BG), 0);
+    lv_obj_set_style_bg_opa(item, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(item, 0, 0);
     lv_obj_set_style_radius(item, 0, 0);
-    lv_obj_set_style_pad_left(item, 4, 0);
-    lv_obj_set_style_pad_right(item, 4, 0);
-    lv_obj_set_style_pad_top(item, 10, 0);
-    lv_obj_set_style_pad_bottom(item, 10, 0);
-    lv_obj_set_style_pad_gap(item, 14, 0);
+    lv_obj_set_style_pad_all(item, 0, 0);
     lv_obj_set_scrollbar_mode(item, LV_SCROLLBAR_MODE_OFF);
     lv_obj_clear_flag(item, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_flex_flow(item, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(item, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_add_flag(item, LV_OBJ_FLAG_CLICKABLE);
 
     if (cb != NULL) {
@@ -82,6 +78,7 @@ lv_obj_t *ui_settings_item_create(
 
     lv_obj_t *icon_circle = lv_obj_create(item);
     lv_obj_set_size(icon_circle, 52, 52);
+    lv_obj_align(icon_circle, LV_ALIGN_LEFT_MID, 4, 0);
     lv_obj_set_style_radius(icon_circle, 26, 0);
     lv_obj_set_style_bg_color(icon_circle, lv_color_hex(icon_color), 0);
     lv_obj_set_style_bg_opa(icon_circle, LV_OPA_COVER, 0);
@@ -99,11 +96,12 @@ lv_obj_t *ui_settings_item_create(
     }
 
     lv_obj_t *label = lv_label_create(item);
-    lv_label_set_text(label, title != NULL ? title : "");
+    lv_label_set_text_static(label, title != NULL ? title : "");
     lv_obj_set_width(label, UI_THEME_BUTTON_WIDTH - 92);
-    lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_color(label, lv_color_hex(UI_COLOR_TEXT), 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
+    lv_obj_align(label, LV_ALIGN_LEFT_MID, 70, 0);
 
     return item;
 }

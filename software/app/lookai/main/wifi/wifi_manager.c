@@ -78,6 +78,26 @@ static esp_err_t start_setup_portal_sync(void);
 static void update_saved_networks_ui_cache(void);
 static void update_wifi_status(const char *status);
 
+
+static void copy_string_truncated(char *dst, size_t dst_size, const char *src)
+{
+    if (dst == NULL || dst_size == 0) {
+        return;
+    }
+
+    if (src == NULL) {
+        src = "";
+    }
+
+    size_t len = 0;
+    while (len < dst_size - 1 && src[len] != '\0') {
+        len++;
+    }
+
+    memcpy(dst, src, len);
+    dst[len] = '\0';
+}
+
 static int get_saved_count(void)
 {
     wifi_storage_credential_t items[WIFI_STORAGE_MAX_NETWORKS] = {0};
@@ -105,8 +125,7 @@ static void update_saved_networks_ui_cache(void)
     }
 
     for (size_t i = 0; i < count && i < UI_MANAGER_MAX_SAVED_NETWORKS; i++) {
-        strncpy(ui_items[i].ssid, items[i].ssid, sizeof(ui_items[i].ssid) - 1);
-        ui_items[i].ssid[sizeof(ui_items[i].ssid) - 1] = '\0';
+        copy_string_truncated(ui_items[i].ssid, sizeof(ui_items[i].ssid), items[i].ssid);
         ui_items[i].connected = wifi_ap_is_sta_connected() && strcmp(items[i].ssid, wifi_ap_get_sta_ssid()) == 0;
     }
 
@@ -178,11 +197,9 @@ static bool find_best_saved_network(char *out_ssid, size_t out_ssid_len, char *o
         return false;
     }
 
-    strncpy(out_ssid, saved[best_saved_index].ssid, out_ssid_len - 1);
-    out_ssid[out_ssid_len - 1] = '\0';
+    copy_string_truncated(out_ssid, out_ssid_len, saved[best_saved_index].ssid);
 
-    strncpy(out_password, saved[best_saved_index].password, out_password_len - 1);
-    out_password[out_password_len - 1] = '\0';
+    copy_string_truncated(out_password, out_password_len, saved[best_saved_index].password);
 
     ESP_LOGI(TAG, "Best saved network: %s, RSSI: %d", out_ssid, best_rssi);
 
@@ -344,7 +361,7 @@ static void on_connect_saved_network(const char *ssid)
         return;
     }
 
-    strncpy(request->ssid, ssid, sizeof(request->ssid) - 1);
+    copy_string_truncated(request->ssid, sizeof(request->ssid), ssid);
 
     xTaskCreate(connect_saved_task, "connect_saved", WIFI_MANAGER_CONNECT_SAVED_TASK_STACK_SIZE, request, 5, NULL);
 }
@@ -387,7 +404,7 @@ static void on_forget_saved_network(const char *ssid)
         return;
     }
 
-    strncpy(request->ssid, ssid, sizeof(request->ssid) - 1);
+    copy_string_truncated(request->ssid, sizeof(request->ssid), ssid);
 
     xTaskCreate(forget_saved_task, "forget_saved", 4096, request, 5, NULL);
 }
@@ -597,8 +614,8 @@ static void portal_connect_task(void *arg)
     memset(s_pending_ssid, 0, sizeof(s_pending_ssid));
     memset(s_pending_password, 0, sizeof(s_pending_password));
 
-    strncpy(s_pending_ssid, request->ssid, sizeof(s_pending_ssid) - 1);
-    strncpy(s_pending_password, request->password, sizeof(s_pending_password) - 1);
+    copy_string_truncated(s_pending_ssid, sizeof(s_pending_ssid), request->ssid);
+    copy_string_truncated(s_pending_password, sizeof(s_pending_password), request->password);
 
     s_pending_credentials_valid = true;
 
@@ -636,8 +653,8 @@ static void on_portal_connect_request(const char *ssid, const char *password)
         return;
     }
 
-    strncpy(request->ssid, ssid, sizeof(request->ssid) - 1);
-    strncpy(request->password, password != NULL ? password : "", sizeof(request->password) - 1);
+    copy_string_truncated(request->ssid, sizeof(request->ssid), ssid);
+    copy_string_truncated(request->password, sizeof(request->password), password);
 
     BaseType_t ok = xTaskCreate(portal_connect_task, "portal_connect", WIFI_MANAGER_PORTAL_CONNECT_TASK_STACK_SIZE, request, 5, &s_portal_connect_task_handle);
 

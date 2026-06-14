@@ -69,9 +69,11 @@ esp_err_t menu_controller_pop(menu_controller_t *controller)
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (controller->top > 0) {
-        controller->top--;
+    if (controller->top <= 0) {
+        return ESP_OK;
     }
+
+    controller->top--;
 
     notify_changed(controller);
 
@@ -82,6 +84,10 @@ esp_err_t menu_controller_reset(menu_controller_t *controller, menu_screen_t roo
 {
     if (controller == NULL) {
         return ESP_ERR_INVALID_ARG;
+    }
+
+    if (controller->top == 0 && controller->stack[0] == root) {
+        return ESP_OK;
     }
 
     controller->top = 0;
@@ -96,6 +102,10 @@ esp_err_t menu_controller_show(menu_controller_t *controller, menu_screen_t scre
 {
     if (controller == NULL) {
         return ESP_ERR_INVALID_ARG;
+    }
+
+    if (controller->stack[controller->top] == screen) {
+        return ESP_OK;
     }
 
     controller->stack[controller->top] = screen;
