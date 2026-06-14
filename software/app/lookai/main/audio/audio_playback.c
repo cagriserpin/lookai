@@ -491,6 +491,25 @@ esp_err_t audio_playback_play_wav_file(
         return err;
     }
 
+    struct stat st = {0};
+    uint32_t wav_bytes = wav.pcm_bytes + wav.data_offset;
+    if (stat(path, &st) == 0 && st.st_size > 0) {
+        wav_bytes = (uint32_t)st.st_size;
+
+        if ((uint32_t)st.st_size > wav.data_offset) {
+            uint32_t available_pcm_bytes = (uint32_t)st.st_size - wav.data_offset;
+            if (wav.pcm_bytes > available_pcm_bytes) {
+                ESP_LOGW(
+                    TAG,
+                    "WAV data size looks open-ended (%lu), clamping to file payload: %lu bytes",
+                    (unsigned long)wav.pcm_bytes,
+                    (unsigned long)available_pcm_bytes
+                );
+                wav.pcm_bytes = available_pcm_bytes;
+            }
+        }
+    }
+
     if (fseek(file, (long)wav.data_offset, SEEK_SET) != 0) {
         fclose(file);
         return ESP_FAIL;
@@ -546,12 +565,6 @@ esp_err_t audio_playback_play_wav_file(
 
     close_speaker_codec();
     s_wav_playing = false;
-
-    struct stat st = {0};
-    uint32_t wav_bytes = wav.pcm_bytes + wav.data_offset;
-    if (stat(path, &st) == 0 && st.st_size > 0) {
-        wav_bytes = (uint32_t)st.st_size;
-    }
 
     if (out_result != NULL) {
         memset(out_result, 0, sizeof(*out_result));
