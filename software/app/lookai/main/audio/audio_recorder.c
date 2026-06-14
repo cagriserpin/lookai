@@ -17,6 +17,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_spiffs.h"
+#include "sdkconfig.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -27,7 +28,15 @@
 static const char *TAG = "audio_recorder";
 
 #define AUDIO_RECORDER_SPIFFS_LABEL "storage"
+#if CONFIG_LOOKAI_STT_AUDIO_FORMAT_PCM
+#define AUDIO_RECORDER_PATH BSP_SPIFFS_MOUNT_POINT "/stt_last.pcm"
+#define AUDIO_RECORDER_CONTAINER_LABEL "PCM"
+#elif CONFIG_LOOKAI_STT_AUDIO_FORMAT_WAV
 #define AUDIO_RECORDER_PATH BSP_SPIFFS_MOUNT_POINT "/stt_last.wav"
+#define AUDIO_RECORDER_CONTAINER_LABEL "WAV"
+#else
+#error "No LookAI STT audio format selected."
+#endif
 #define AUDIO_RECORDER_TASK_STACK_SIZE 4096
 #define AUDIO_RECORDER_TASK_PRIORITY 5
 #define AUDIO_RECORDER_READ_BUFFER_SIZE 1024
@@ -199,6 +208,7 @@ static void close_recording_file(void)
 
     fflush(s_record_file);
 
+#if CONFIG_LOOKAI_STT_AUDIO_FORMAT_WAV
     if (wav_writer_finalize_header(
             s_record_file,
             AUDIO_RECORDER_SAMPLE_RATE,
@@ -209,6 +219,7 @@ static void close_recording_file(void)
         ESP_LOGE(TAG, "Failed to finalize WAV header");
         s_record_result = ESP_FAIL;
     }
+#endif
 
     fflush(s_record_file);
     fclose(s_record_file);
@@ -307,6 +318,7 @@ esp_err_t audio_recorder_start(void)
         return ESP_FAIL;
     }
 
+#if CONFIG_LOOKAI_STT_AUDIO_FORMAT_WAV
     err = wav_writer_write_placeholder_header(
         s_record_file,
         AUDIO_RECORDER_SAMPLE_RATE,
@@ -321,6 +333,7 @@ esp_err_t audio_recorder_start(void)
         esp_codec_dev_close(s_mic_dev);
         return err;
     }
+#endif
 
     s_pcm_bytes = 0;
     s_record_result = ESP_OK;
@@ -347,7 +360,7 @@ esp_err_t audio_recorder_start(void)
     }
 
     runtime_diag_log("audio_recorder_start_done");
-    ESP_LOGI(TAG, "Recording to %s", AUDIO_RECORDER_PATH);
+    ESP_LOGI(TAG, "Recording %s to %s", AUDIO_RECORDER_CONTAINER_LABEL, AUDIO_RECORDER_PATH);
     return ESP_OK;
 }
 
@@ -380,8 +393,9 @@ esp_err_t audio_recorder_stop(audio_recorder_result_t *out_result)
 
     ESP_LOGI(
         TAG,
-        "Recording saved: %s, duration=%" PRIu32 " ms, wav=%" PRIu32 " bytes",
+        "Recording saved: %s, format=%s, duration=%" PRIu32 " ms, bytes=%" PRIu32,
         s_last_result.path,
+        AUDIO_RECORDER_CONTAINER_LABEL,
         s_last_result.duration_ms,
         s_last_result.wav_bytes
     );

@@ -60,11 +60,46 @@ menu "LookAI"
             OpenAI voices include marin, cedar, alloy, ash, ballad, coral,
             echo, fable, nova, onyx, sage, shimmer, and verse.
 
-    config LOOKAI_TTS_RESPONSE_FORMAT
-        string "TTS response format"
-        default "wav"
+    choice LOOKAI_STT_AUDIO_FORMAT
+        prompt "STT audio upload format"
+        default LOOKAI_STT_AUDIO_FORMAT_WAV
         help
-            Audio response format for generated speech. Keep wav so the
-            device can save /spiffs/tts_last.wav and play it with the WAV player.
+            Select the audio container used by the STT recorder and multipart
+            upload. WAV is the safest OpenAI-compatible option. PCM is raw
+            16 kHz, 16-bit, mono audio and is useful for compatible endpoints
+            or experiments.
+
+    config LOOKAI_STT_AUDIO_FORMAT_WAV
+        bool "wav - record WAV and upload audio/wav"
+        help
+            Save /spiffs/stt_last.wav and upload it as audio/wav.
+
+    config LOOKAI_STT_AUDIO_FORMAT_PCM
+        bool "pcm - record raw PCM and upload audio/pcm"
+        help
+            Save /spiffs/stt_last.pcm and upload raw 16 kHz, 16-bit, mono PCM.
+
+    endchoice
+
+    choice LOOKAI_TTS_RESPONSE_FORMAT
+        prompt "TTS response format"
+        default LOOKAI_TTS_RESPONSE_FORMAT_WAV
+        help
+            Select how generated speech is requested and played.
+
+    config LOOKAI_TTS_RESPONSE_FORMAT_WAV
+        bool "wav - full download then playback"
+        help
+            Request response_format=wav, save /spiffs/tts_last.wav, then play
+            the downloaded WAV file. This is the safer fallback path.
+
+    config LOOKAI_TTS_RESPONSE_FORMAT_PCM
+        bool "pcm - direct circular-buffer streaming"
+        help
+            Request response_format=pcm and play raw 24 kHz, 16-bit, mono PCM
+            directly from the circular streaming buffer. No TTS WAV file is
+            written.
+
+    endchoice
 
 endmenu

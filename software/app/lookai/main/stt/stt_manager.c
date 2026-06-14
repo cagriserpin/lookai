@@ -13,6 +13,7 @@
 #include "stt_api_client.h"
 #include "ui_manager.h"
 #include "wifi_manager.h"
+#include "sdkconfig.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -64,7 +65,7 @@ static bool s_transcribe_success = false;
 
 static int64_t s_stt_flow_start_ms = 0;
 static int64_t s_stt_release_ms = 0;
-static int64_t s_stt_wav_ready_ms = 0;
+static int64_t s_stt_audio_ready_ms = 0;
 static int64_t s_stt_api_task_start_ms = 0;
 
 static int64_t timing_now_ms(void)
@@ -323,9 +324,9 @@ static void transcribe_task(void *arg)
     s_stt_api_task_start_ms = timing_now_ms();
     ESP_LOGI(
         TAG,
-        "TIMING STT api_task_start since_release_ms=%lld since_wav_ready_ms=%lld total_ms=%lld",
+        "TIMING STT api_task_start since_release_ms=%lld since_audio_ready_ms=%lld total_ms=%lld",
         (long long)(s_stt_release_ms > 0 ? s_stt_api_task_start_ms - s_stt_release_ms : -1),
-        (long long)(s_stt_wav_ready_ms > 0 ? s_stt_api_task_start_ms - s_stt_wav_ready_ms : -1),
+        (long long)(s_stt_audio_ready_ms > 0 ? s_stt_api_task_start_ms - s_stt_audio_ready_ms : -1),
         (long long)(s_stt_flow_start_ms > 0 ? s_stt_api_task_start_ms - s_stt_flow_start_ms : -1)
     );
     runtime_diag_log("stt_transcribe_task_before_api");
@@ -380,7 +381,7 @@ static void handle_press(void)
 
     s_stt_flow_start_ms = timing_now_ms();
     s_stt_release_ms = 0;
-    s_stt_wav_ready_ms = 0;
+    s_stt_audio_ready_ms = 0;
     s_stt_api_task_start_ms = 0;
 
     ESP_LOGI(TAG, "TALK pressed");
@@ -451,9 +452,9 @@ static void start_transcription_for_path(const char *path)
     runtime_diag_log("stt_after_transcribing_ui_before_delay");
     ESP_LOGI(
         TAG,
-        "TIMING STT transcribing_ui_ready since_release_ms=%lld since_wav_ready_ms=%lld total_ms=%lld",
+        "TIMING STT transcribing_ui_ready since_release_ms=%lld since_audio_ready_ms=%lld total_ms=%lld",
         (long long)timing_since_ms(s_stt_release_ms),
-        (long long)timing_since_ms(s_stt_wav_ready_ms),
+        (long long)timing_since_ms(s_stt_audio_ready_ms),
         (long long)timing_since_ms(s_stt_flow_start_ms)
     );
     vTaskDelay(pdMS_TO_TICKS(STT_TRANSCRIBE_START_DELAY_MS));
@@ -507,11 +508,11 @@ static void handle_release(void)
         return;
     }
 
-    s_stt_wav_ready_ms = timing_now_ms();
+    s_stt_audio_ready_ms = timing_now_ms();
     ESP_LOGI(
         TAG,
-        "TIMING STT wav_ready stop_ms=%lld recorded_ms=%lu pcm_bytes=%lu wav_bytes=%lu total_ms=%lld",
-        (long long)(s_stt_release_ms > 0 ? s_stt_wav_ready_ms - s_stt_release_ms : -1),
+        "TIMING STT audio_ready stop_ms=%lld recorded_ms=%lu pcm_bytes=%lu file_bytes=%lu total_ms=%lld",
+        (long long)(s_stt_release_ms > 0 ? s_stt_audio_ready_ms - s_stt_release_ms : -1),
         (unsigned long)result.duration_ms,
         (unsigned long)result.pcm_bytes,
         (unsigned long)result.wav_bytes,
@@ -645,21 +646,24 @@ static void handle_play_recording(void)
     ESP_LOGI(TAG, "Playing saved recording: %s", path);
 
     struct stat st = {0};
-    uint32_t wav_bytes = 0;
+    uint32_t file_bytes = 0;
     uint32_t pcm_bytes = 0;
     uint32_t duration_ms = 0;
 
     if (stat(path, &st) == 0 && st.st_size > 0) {
-        wav_bytes = (uint32_t)st.st_size;
-
-        if (wav_bytes > 44U) {
-            pcm_bytes = wav_bytes - 44U;
-            duration_ms = (uint32_t)(((uint64_t)pcm_bytes * 1000ULL) / 32000ULL);
+        file_bytes = (uint32_t)st.st_size;
+#if CONFIG_LOOKAI_STT_AUDIO_FORMAT_PCM
+        pcm_bytes = file_bytes;
+#elif CONFIG_LOOKAI_STT_AUDIO_FORMAT_WAV
+        if (file_bytes > 44U) {
+            pcm_bytes = file_bytes - 44U;
         }
+#endif
+        duration_ms = (uint32_t)(((uint64_t)pcm_bytes * 1000ULL) / 32000ULL);
     }
 
     float seconds = (float)duration_ms / 1000.0f;
-    float kb = (float)wav_bytes / 1024.0f;
+    float kb = (float)file_bytes / 1024.0f;
 
     char playing_details[256];
     snprintf(
@@ -682,7 +686,19 @@ static void handle_play_recording(void)
     );
 
     audio_playback_result_t result = {0};
+#if CONFIG_LOOKAI_STT_AUDIO_FORMAT_PCM
+    esp_err_t err = audio_playback_play_pcm_file(
+        path,
+        AUDIO_RECORDER_SAMPLE_RATE,
+        AUDIO_RECORDER_CHANNELS,
+        AUDIO_RECORDER_BITS_PER_SAMPLE,
+        &result
+    );
+#elif CONFIG_LOOKAI_STT_AUDIO_FORMAT_WAV
     esp_err_t err = audio_playback_play_wav_file(path, &result);
+#else
+#error "No LookAI STT audio format selected."
+#endif
 
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to play recording: %s", esp_err_to_name(err));

@@ -33,6 +33,7 @@ static const char *TAG = "tts_manager";
 #define TTS_PRE_PLAY_DELAY_MS 100
 #define TTS_TEXT_BUFFER_SIZE 224
 #define TTS_RESULT_BUFFER_SIZE 1024
+#define TTS_WAV_PATH "/spiffs/tts_last.wav"
 
 typedef enum {
     TTS_MANAGER_EVENT_SAMPLE_1 = 0,
@@ -55,7 +56,7 @@ static TaskHandle_t s_generate_task_handle = NULL;
 static tts_manager_state_t s_state = TTS_MANAGER_STATE_READY;
 static char s_pending_text[TTS_TEXT_BUFFER_SIZE] = {0};
 static char s_generate_error[TTS_RESULT_BUFFER_SIZE] = {0};
-static uint32_t s_generated_pcm_bytes = 0;
+static uint32_t s_generated_audio_bytes = 0;
 static audio_playback_result_t s_stream_playback_result = {0};
 static bool s_generate_success = false;
 
@@ -148,7 +149,7 @@ static void generate_task(void *arg)
         (long long)timing_since_ms(s_tts_flow_start_ms)
     );
 
-    uint32_t pcm_bytes = 0;
+    uint32_t audio_bytes = 0;
     audio_playback_result_t playback = {0};
     tts_api_client_stream_callbacks_t stream_callbacks = {
         .on_playback_started = tts_stream_playback_started_callback,
@@ -156,34 +157,53 @@ static void generate_task(void *arg)
     };
 
     runtime_diag_log("tts_manager_before_api");
+#if CONFIG_LOOKAI_TTS_RESPONSE_FORMAT_PCM
     esp_err_t err = tts_api_client_generate_pcm_streaming(
         s_pending_text,
-        &pcm_bytes,
+        &audio_bytes,
         &playback,
         &stream_callbacks
     );
+    const char *format_name = "pcm";
+#elif CONFIG_LOOKAI_TTS_RESPONSE_FORMAT_WAV
+    esp_err_t err = tts_api_client_generate_wav(
+        s_pending_text,
+        TTS_WAV_PATH,
+        &audio_bytes
+    );
+    const char *format_name = "wav";
+    if (err == ESP_OK) {
+        if (stream_callbacks.on_playback_started != NULL) {
+            stream_callbacks.on_playback_started(stream_callbacks.user_ctx);
+        }
+        err = audio_playback_play_wav_file(TTS_WAV_PATH, &playback);
+    }
+#else
+#error "No LookAI TTS response format selected."
+#endif
     runtime_diag_log("tts_manager_after_api");
     s_tts_api_done_ms = timing_now_ms();
     ESP_LOGI(
         TAG,
-        "TIMING TTS api_pcm_stream_done api_ms=%lld total_ms=%lld pcm_bytes=%lu played_ms=%lu result=%s",
+        "TIMING TTS api_done format=%s api_ms=%lld total_ms=%lld audio_bytes=%lu played_ms=%lu result=%s",
+        format_name,
         (long long)(s_tts_api_start_ms > 0 ? s_tts_api_done_ms - s_tts_api_start_ms : -1),
         (long long)timing_since_ms(s_tts_flow_start_ms),
-        (unsigned long)pcm_bytes,
+        (unsigned long)audio_bytes,
         (unsigned long)playback.duration_ms,
         esp_err_to_name(err)
     );
 
     if (err == ESP_OK) {
         s_generate_success = true;
-        s_generated_pcm_bytes = pcm_bytes;
+        s_generated_audio_bytes = audio_bytes;
         s_stream_playback_result = playback;
         s_generate_error[0] = '\0';
     } else {
         const char *api_error = tts_api_client_get_last_error();
 
         s_generate_success = false;
-        s_generated_pcm_bytes = 0;
+        s_generated_audio_bytes = 0;
         memset(&s_stream_playback_result, 0, sizeof(s_stream_playback_result));
         snprintf(
             s_generate_error,
@@ -220,7 +240,7 @@ static void handle_stream_playback_started(void)
     snprintf(
         details,
         sizeof(details),
-        "Streaming audio...\nText: %s",
+        "Playing audio...\nText: %s",
         s_pending_text
     );
 
@@ -257,9 +277,9 @@ static void handle_generate_done(void)
 
     ESP_LOGI(
         TAG,
-        "TIMING TTS stream_done played_ms=%lu pcm_bytes=%lu total_ms=%lld",
+        "TIMING TTS done played_ms=%lu audio_bytes=%lu total_ms=%lld",
         (unsigned long)s_stream_playback_result.duration_ms,
-        (unsigned long)s_stream_playback_result.pcm_bytes,
+        (unsigned long)s_generated_audio_bytes,
         (long long)timing_since_ms(s_tts_flow_start_ms)
     );
 
@@ -305,7 +325,7 @@ static void handle_speak_request(const char *text)
 
     snprintf(s_pending_text, sizeof(s_pending_text), "%s", text);
     s_generate_error[0] = '\0';
-    s_generated_pcm_bytes = 0;
+    s_generated_audio_bytes = 0;
     memset(&s_stream_playback_result, 0, sizeof(s_stream_playback_result));
     s_generate_success = false;
 

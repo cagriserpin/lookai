@@ -67,6 +67,39 @@ static bool config_string_is_empty(const char *value)
     return value == NULL || value[0] == '\0';
 }
 
+static const char *stt_audio_format_label(void)
+{
+#if CONFIG_LOOKAI_STT_AUDIO_FORMAT_PCM
+    return "pcm";
+#elif CONFIG_LOOKAI_STT_AUDIO_FORMAT_WAV
+    return "wav";
+#else
+    return "unknown";
+#endif
+}
+
+static const char *stt_audio_upload_filename(void)
+{
+#if CONFIG_LOOKAI_STT_AUDIO_FORMAT_PCM
+    return "stt_last.pcm";
+#elif CONFIG_LOOKAI_STT_AUDIO_FORMAT_WAV
+    return "stt_last.wav";
+#else
+    return "stt_last.bin";
+#endif
+}
+
+static const char *stt_audio_content_type(void)
+{
+#if CONFIG_LOOKAI_STT_AUDIO_FORMAT_PCM
+    return "audio/pcm";
+#elif CONFIG_LOOKAI_STT_AUDIO_FORMAT_WAV
+    return "audio/wav";
+#else
+    return "application/octet-stream";
+#endif
+}
+
 static esp_err_t build_form_field(
     char *buffer,
     size_t buffer_size,
@@ -111,10 +144,12 @@ static esp_err_t build_file_header(
         buffer,
         buffer_size,
         "--%s\r\n"
-        "Content-Disposition: form-data; name=\"file\"; filename=\"stt_last.wav\"\r\n"
-        "Content-Type: audio/wav\r\n"
+        "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n"
+        "Content-Type: %s\r\n"
         "\r\n",
-        STT_API_CLIENT_BOUNDARY
+        STT_API_CLIENT_BOUNDARY,
+        stt_audio_upload_filename(),
+        stt_audio_content_type()
     );
 
     if (written < 0 || (size_t)written >= buffer_size) {
@@ -417,7 +452,8 @@ esp_err_t stt_api_client_transcribe_wav(
 
     ESP_LOGI(
         TAG,
-        "TIMING STT_API request_prepared wav_bytes=%ld multipart_bytes=%u prepare_ms=%lld total_ms=%lld",
+        "TIMING STT_API request_prepared format=%s audio_bytes=%ld multipart_bytes=%u prepare_ms=%lld total_ms=%lld",
+        stt_audio_format_label(),
         (long)st.st_size,
         (unsigned int)total_len,
         (long long)timing_since_ms(api_start_ms),
@@ -546,7 +582,7 @@ esp_err_t stt_api_client_transcribe_wav(
     runtime_diag_log("stt_api_after_upload");
     ESP_LOGI(
         TAG,
-        "TIMING STT_API upload upload_ms=%lld wav_uploaded=%lu total_ms=%lld result=%s",
+        "TIMING STT_API upload upload_ms=%lld audio_uploaded=%lu total_ms=%lld result=%s",
         (long long)timing_since_ms(upload_start_ms),
         (unsigned long)uploaded_file_bytes,
         (long long)timing_since_ms(api_start_ms),

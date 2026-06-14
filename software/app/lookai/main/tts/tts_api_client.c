@@ -124,9 +124,14 @@ static esp_err_t build_request_body_with_format(const char *text, const char *re
     return ESP_OK;
 }
 
-static esp_err_t build_request_body(const char *text, char **out_body)
+static esp_err_t build_request_body_wav(const char *text, char **out_body)
 {
-    return build_request_body_with_format(text, CONFIG_LOOKAI_TTS_RESPONSE_FORMAT, out_body);
+    return build_request_body_with_format(text, "wav", out_body);
+}
+
+static esp_err_t build_request_body_pcm(const char *text, char **out_body)
+{
+    return build_request_body_with_format(text, "pcm", out_body);
 }
 
 static esp_err_t write_all(
@@ -703,14 +708,9 @@ esp_err_t tts_api_client_generate_wav(
         return ESP_ERR_INVALID_STATE;
     }
 
-    if (config_string_is_empty(CONFIG_LOOKAI_TTS_RESPONSE_FORMAT)) {
-        set_last_error("TTS response format is not configured.");
-        return ESP_ERR_INVALID_STATE;
-    }
-
     char *request_body = NULL;
     body_start_ms = timing_now_ms();
-    esp_err_t err = build_request_body(text, &request_body);
+    esp_err_t err = build_request_body_wav(text, &request_body);
     if (err != ESP_OK) {
         return err;
     }
@@ -881,14 +881,9 @@ esp_err_t tts_api_client_generate_wav_streaming(
         return ESP_ERR_INVALID_STATE;
     }
 
-    if (config_string_is_empty(CONFIG_LOOKAI_TTS_RESPONSE_FORMAT)) {
-        set_last_error("TTS response format is not configured.");
-        return ESP_ERR_INVALID_STATE;
-    }
-
     char *request_body = NULL;
     body_start_ms = timing_now_ms();
-    esp_err_t err = build_request_body(text, &request_body);
+    esp_err_t err = build_request_body_wav(text, &request_body);
     if (err != ESP_OK) {
         return err;
     }
@@ -1067,7 +1062,7 @@ esp_err_t tts_api_client_generate_pcm_streaming(
 
     char *request_body = NULL;
     body_start_ms = timing_now_ms();
-    esp_err_t err = build_request_body_with_format(text, "pcm", &request_body);
+    esp_err_t err = build_request_body_pcm(text, &request_body);
     if (err != ESP_OK) {
         return err;
     }

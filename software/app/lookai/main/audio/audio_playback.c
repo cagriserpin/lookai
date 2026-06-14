@@ -1424,6 +1424,110 @@ esp_err_t audio_playback_stop_sine_440(void)
     return ESP_OK;
 }
 
+
+esp_err_t audio_playback_play_pcm_file(
+    const char *path,
+    uint32_t sample_rate,
+    uint16_t channels,
+    uint16_t bits_per_sample,
+    audio_playback_result_t *out_result
+)
+{
+    if (path == NULL || sample_rate == 0 || channels == 0 || bits_per_sample == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (audio_playback_is_busy()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    esp_err_t err = audio_playback_init();
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    FILE *file = fopen(path, "rb");
+    if (file == NULL) {
+        ESP_LOGE(TAG, "Failed to open %s for PCM playback", path);
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    struct stat st = {0};
+    uint32_t pcm_bytes = 0;
+    if (stat(path, &st) == 0 && st.st_size > 0) {
+        pcm_bytes = (uint32_t)st.st_size;
+    }
+
+    err = open_speaker_codec(sample_rate, channels, bits_per_sample);
+    if (err != ESP_OK) {
+        fclose(file);
+        return err;
+    }
+
+    ESP_LOGI(TAG, "Playing PCM file: %s", path);
+    s_wav_playing = true;
+
+    uint8_t *buffer = (uint8_t *)malloc(AUDIO_PLAYBACK_BUFFER_SIZE);
+    if (buffer == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate PCM playback buffer");
+        close_speaker_codec();
+        s_wav_playing = false;
+        fclose(file);
+        return ESP_ERR_NO_MEM;
+    }
+
+    uint32_t played_bytes = 0;
+    esp_err_t play_result = ESP_OK;
+
+    while (true) {
+        size_t bytes_read = fread(buffer, 1, AUDIO_PLAYBACK_BUFFER_SIZE, file);
+
+        if (bytes_read == 0) {
+            if (ferror(file)) {
+                ESP_LOGE(TAG, "Failed while reading PCM data");
+                play_result = ESP_FAIL;
+            }
+            break;
+        }
+
+        int codec_ret = esp_codec_dev_write(s_speaker_dev, buffer, bytes_read);
+        if (codec_ret != 0) {
+            ESP_LOGE(TAG, "Speaker write failed: %d", codec_ret);
+            play_result = ESP_FAIL;
+            break;
+        }
+
+        played_bytes += (uint32_t)bytes_read;
+    }
+
+    free(buffer);
+    close_speaker_codec();
+    s_wav_playing = false;
+    fclose(file);
+
+    if (out_result != NULL) {
+        memset(out_result, 0, sizeof(*out_result));
+        strlcpy(out_result->path, path, sizeof(out_result->path));
+        out_result->duration_ms = bytes_to_duration_ms(
+            played_bytes,
+            sample_rate,
+            channels,
+            bits_per_sample
+        );
+        out_result->pcm_bytes = played_bytes;
+        out_result->wav_bytes = pcm_bytes;
+        out_result->sample_rate = sample_rate;
+        out_result->channels = channels;
+        out_result->bits_per_sample = bits_per_sample;
+    }
+
+    if (play_result == ESP_OK) {
+        ESP_LOGI(TAG, "PCM playback done: %s", path);
+    }
+
+    return play_result;
+}
+
 esp_err_t audio_playback_play_wav_file(
     const char *path,
     audio_playback_result_t *out_result

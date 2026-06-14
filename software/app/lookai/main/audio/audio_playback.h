@@ -84,6 +84,19 @@ esp_err_t audio_playback_play_wav_file(
 );
 
 /**
+ * @brief Play a raw signed 16-bit PCM file synchronously.
+ *
+ * The function returns after playback finishes or an error occurs.
+ */
+esp_err_t audio_playback_play_pcm_file(
+    const char *path,
+    uint32_t sample_rate,
+    uint16_t channels,
+    uint16_t bits_per_sample,
+    audio_playback_result_t *out_result
+);
+
+/**
  * @brief Start a streaming WAV playback consumer.
  *
  * Bytes written with audio_playback_stream_wav_write() must start at the
