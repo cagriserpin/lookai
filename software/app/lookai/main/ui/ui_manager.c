@@ -5,12 +5,16 @@
 
 #include "ui_manager.h"
 
+#include "runtime_diag.h"
+
 #include <stdio.h>
 #include <string.h>
 
 #include "esp_log.h"
 #include "bsp/esp32_s3_touch_amoled_1_75.h"
 #include "lvgl.h"
+
+#include "lookai_display.h"
 
 #include "brightness/brightness_screen.h"
 #include "wifi/manage_networks_screen.h"
@@ -138,13 +142,17 @@ static void apply_display_brightness(int brightness_percent)
 static void wifi_button_event_cb(lv_event_t *event)
 {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        runtime_diag_log("button_settings_wifi_clicked");
+        runtime_diag_log("ui_wifi_click_before_push");
         menu_controller_push(&s_menu, MENU_SCREEN_WIFI);
+        runtime_diag_log("ui_wifi_click_after_push");
     }
 }
 
 static void brightness_button_event_cb(lv_event_t *event)
 {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        runtime_diag_log("button_settings_brightness_clicked");
         menu_controller_push(&s_menu, MENU_SCREEN_BRIGHTNESS);
     }
 }
@@ -152,13 +160,17 @@ static void brightness_button_event_cb(lv_event_t *event)
 static void stt_button_event_cb(lv_event_t *event)
 {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        runtime_diag_log("button_settings_stt_clicked");
+        runtime_diag_log("ui_stt_click_before_push");
         menu_controller_push(&s_menu, MENU_SCREEN_STT);
+        runtime_diag_log("ui_stt_click_after_push");
     }
 }
 
 static void tts_button_event_cb(lv_event_t *event)
 {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        runtime_diag_log("button_settings_tts_clicked");
         menu_controller_push(&s_menu, MENU_SCREEN_TTS);
     }
 }
@@ -166,13 +178,17 @@ static void tts_button_event_cb(lv_event_t *event)
 static void back_event_cb(lv_event_t *event)
 {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        runtime_diag_log("button_back_clicked");
+        runtime_diag_log("ui_back_before_pop");
         menu_controller_pop(&s_menu);
+        runtime_diag_log("ui_back_after_pop");
     }
 }
 
 static void manage_saved_event_cb(lv_event_t *event)
 {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        runtime_diag_log("button_wifi_manage_saved_clicked");
         menu_controller_push(&s_menu, MENU_SCREEN_SAVED_NETWORKS);
     }
 }
@@ -204,6 +220,12 @@ static void portal_toggle_event_cb(lv_event_t *event)
         return;
     }
 
+    runtime_diag_log(
+        s_state.portal_active ?
+            "button_wifi_close_portal_clicked" :
+            "button_wifi_connect_another_clicked"
+    );
+
     menu_controller_show(&s_menu, MENU_SCREEN_WIFI);
 
     if (s_state.portal_active) {
@@ -223,6 +245,8 @@ static void connect_saved_event_cb(lv_event_t *event)
         return;
     }
 
+    runtime_diag_log("button_saved_network_connect_clicked");
+
     const char *ssid = (const char *)lv_event_get_user_data(event);
     if (ssid == NULL || ssid[0] == '\0') {
         return;
@@ -240,6 +264,8 @@ static void forget_network_event_cb(lv_event_t *event)
     if (lv_event_get_code(event) != LV_EVENT_CLICKED) {
         return;
     }
+
+    runtime_diag_log("button_saved_network_forget_clicked");
 
     const char *ssid = (const char *)lv_event_get_user_data(event);
     if (ssid == NULL || ssid[0] == '\0') {
@@ -330,6 +356,8 @@ static void render_body_unlocked(lv_obj_t *body)
 
 static void render_current_unlocked(void)
 {
+    runtime_diag_log("ui_render_current_begin");
+
     lv_obj_t *screen = get_active_screen();
 
     ui_scaffold_config_t scaffold_config = {
@@ -343,7 +371,11 @@ static void render_current_unlocked(void)
     s_body = NULL;
     s_body = ui_scaffold_create(screen, &scaffold_config);
 
+    runtime_diag_log("ui_before_render_body");
     render_body_unlocked(s_body);
+    runtime_diag_log("ui_after_render_body");
+
+    runtime_diag_log("ui_render_current_end");
 }
 
 static void render_current_locked(void)
@@ -359,6 +391,8 @@ static void render_current_locked(void)
 
 static void render_body_only_locked(void)
 {
+    runtime_diag_log("ui_render_body_only_begin");
+
     if (bsp_display_lock(1000) != ESP_OK) {
         return;
     }
@@ -370,16 +404,21 @@ static void render_body_only_locked(void)
     }
 
     lv_obj_clean(s_body);
+
+    runtime_diag_log("ui_before_body_rerender");
     render_body_unlocked(s_body);
+    runtime_diag_log("ui_after_body_rerender");
 
     bsp_display_unlock();
+
+    runtime_diag_log("ui_render_body_only_end");
 }
 
 esp_err_t ui_manager_init(void)
 {
     ESP_LOGI(TAG, "Initializing display UI");
 
-    lv_display_t *display = bsp_display_start();
+    lv_display_t *display = lookai_display_start();
     if (display == NULL) {
         ESP_LOGE(TAG, "Display init failed");
         return ESP_FAIL;

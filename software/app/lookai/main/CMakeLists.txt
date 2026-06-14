@@ -4,6 +4,8 @@ idf_component_register(
 
         "app/app_controller.c"
 
+        "system/runtime_diag.c"
+
         "stt/stt_manager.c"
         "stt/stt_api_client.c"
 
@@ -24,6 +26,7 @@ idf_component_register(
         "ui/assets/ui_icons.c"
 
         "ui/ui_manager.c"
+        "ui/lookai_display.c"
         "ui/ui_theme.c"
 
         "ui/navigation/menu_controller.c"
@@ -44,6 +47,7 @@ idf_component_register(
     INCLUDE_DIRS
         "."
         "app"
+        "system"
         "stt"
         "tts"
         "audio"

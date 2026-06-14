@@ -22,6 +22,7 @@
 #include "freertos/task.h"
 
 #include "wav_writer.h"
+#include "runtime_diag.h"
 
 static const char *TAG = "audio_recorder";
 
@@ -280,6 +281,8 @@ esp_err_t audio_recorder_start(void)
         return ESP_ERR_INVALID_STATE;
     }
 
+    runtime_diag_log("audio_recorder_start_begin");
+
     esp_err_t err = audio_recorder_init();
     if (err != ESP_OK) {
         return err;
@@ -334,6 +337,7 @@ esp_err_t audio_recorder_start(void)
         &s_record_task_handle
     );
 
+
     if (ok != pdPASS) {
         ESP_LOGE(TAG, "Failed to create audio recording task");
         s_should_record = false;
@@ -342,6 +346,7 @@ esp_err_t audio_recorder_start(void)
         return ESP_ERR_NO_MEM;
     }
 
+    runtime_diag_log("audio_recorder_start_done");
     ESP_LOGI(TAG, "Recording to %s", AUDIO_RECORDER_PATH);
     return ESP_OK;
 }
@@ -351,6 +356,8 @@ esp_err_t audio_recorder_stop(audio_recorder_result_t *out_result)
     if (s_record_task_handle == NULL) {
         return ESP_ERR_INVALID_STATE;
     }
+
+    runtime_diag_log("audio_recorder_stop_begin");
 
     s_stop_waiter_handle = xTaskGetCurrentTaskHandle();
     s_should_record = false;
@@ -368,6 +375,8 @@ esp_err_t audio_recorder_stop(audio_recorder_result_t *out_result)
     if (out_result != NULL) {
         *out_result = s_last_result;
     }
+
+    runtime_diag_log("audio_recorder_stop_done");
 
     ESP_LOGI(
         TAG,

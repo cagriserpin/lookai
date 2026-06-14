@@ -6,6 +6,7 @@
 #include "stt_screen.h"
 
 #include "ui_theme.h"
+#include "runtime_diag.h"
 
 #ifndef STT_TALK_FONT
 #define STT_TALK_FONT (&lv_font_montserrat_28)
@@ -69,6 +70,7 @@ static void talk_button_event_cb(lv_event_t *event)
     }
 
     if (code == LV_EVENT_PRESSED) {
+        runtime_diag_log("button_stt_talk_pressed");
         lv_obj_set_style_bg_color(button, lv_color_hex(STT_COLOR_GREEN_DARK), 0);
 
         /*
@@ -88,6 +90,11 @@ static void talk_button_event_cb(lv_event_t *event)
             context->callbacks->stt_press();
         }
     } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        runtime_diag_log(
+            code == LV_EVENT_RELEASED ?
+                "button_stt_talk_released" :
+                "button_stt_talk_press_lost"
+        );
         lv_obj_set_style_bg_color(button, lv_color_hex(STT_COLOR_GREEN), 0);
 
         if (context->status_label != NULL) {
@@ -110,6 +117,8 @@ static void test_speaker_button_event_cb(lv_event_t *event)
         return;
     }
 
+    runtime_diag_log("button_stt_test_speaker_clicked");
+
     const ui_manager_callbacks_t *callbacks =
         (const ui_manager_callbacks_t *)lv_event_get_user_data(event);
 
@@ -123,6 +132,8 @@ static void play_recording_button_event_cb(lv_event_t *event)
     if (lv_event_get_code(event) != LV_EVENT_CLICKED) {
         return;
     }
+
+    runtime_diag_log("button_stt_play_recording_clicked");
 
     const ui_manager_callbacks_t *callbacks =
         (const ui_manager_callbacks_t *)lv_event_get_user_data(event);

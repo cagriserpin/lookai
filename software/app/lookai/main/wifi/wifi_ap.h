@@ -117,3 +117,10 @@ const char *wifi_ap_get_sta_ip(void);
  * @brief Return whether STA is connected.
  */
 bool wifi_ap_is_sta_connected(void);
+
+/**
+ * @brief Log current STA link/IP state for diagnostics.
+ *
+ * This function does not change Wi-Fi state.
+ */
+void wifi_ap_log_sta_status(const char *point);

@@ -9,6 +9,7 @@
 
 #include "ui_card.h"
 #include "ui_theme.h"
+#include "runtime_diag.h"
 
 #define TTS_COLOR_PURPLE 0xA855F7
 #define TTS_COLOR_PURPLE_DARK 0x6D28D9
@@ -47,6 +48,8 @@ static void sample_1_event_cb(lv_event_t *event)
         return;
     }
 
+    runtime_diag_log("button_tts_sample_1_clicked");
+
     const ui_manager_callbacks_t *callbacks =
         (const ui_manager_callbacks_t *)lv_event_get_user_data(event);
 
@@ -60,6 +63,8 @@ static void sample_2_event_cb(lv_event_t *event)
     if (lv_event_get_code(event) != LV_EVENT_CLICKED) {
         return;
     }
+
+    runtime_diag_log("button_tts_sample_2_clicked");
 
     const ui_manager_callbacks_t *callbacks =
         (const ui_manager_callbacks_t *)lv_event_get_user_data(event);

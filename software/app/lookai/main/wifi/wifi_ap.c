@@ -15,6 +15,8 @@
 #include "esp_wifi.h"
 #include "nvs_flash.h"
 
+#include "runtime_diag.h"
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -62,6 +64,64 @@ static void emit_event(wifi_ap_event_t event)
 {
     if (s_event_cb != NULL) {
         s_event_cb(event);
+    }
+}
+
+static void disable_wifi_power_save(const char *point)
+{
+    esp_err_t err = esp_wifi_set_ps(WIFI_PS_NONE);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "%s: Wi-Fi power save disabled", point != NULL ? point : "wifi");
+    } else {
+        ESP_LOGW(
+            TAG,
+            "%s: could not disable Wi-Fi power save: %s",
+            point != NULL ? point : "wifi",
+            esp_err_to_name(err)
+        );
+    }
+}
+
+void wifi_ap_log_sta_status(const char *point)
+{
+    const char *name = point != NULL ? point : "wifi_sta_status";
+
+    esp_netif_ip_info_t ip_info = {0};
+    esp_err_t ip_err = ESP_ERR_INVALID_STATE;
+    if (s_sta_netif != NULL) {
+        ip_err = esp_netif_get_ip_info(s_sta_netif, &ip_info);
+    }
+
+    wifi_ap_record_t ap_info = {0};
+    esp_err_t ap_err = ESP_FAIL;
+    if (s_wifi_started) {
+        ap_err = esp_wifi_sta_get_ap_info(&ap_info);
+    }
+
+    wifi_ps_type_t ps_type = WIFI_PS_NONE;
+    esp_err_t ps_err = ESP_FAIL;
+    if (s_wifi_started) {
+        ps_err = esp_wifi_get_ps(&ps_type);
+    }
+
+    ESP_LOGI(
+        TAG,
+        "%s: started=%d connected=%d connecting=%d ssid=%s ip=" IPSTR " gw=" IPSTR " ap_info=%s rssi=%d ps=%s(%d)",
+        name,
+        s_wifi_started ? 1 : 0,
+        s_sta_connected ? 1 : 0,
+        s_sta_connecting ? 1 : 0,
+        s_sta_ssid[0] != '\0' ? s_sta_ssid : "-",
+        IP2STR(&ip_info.ip),
+        IP2STR(&ip_info.gw),
+        ap_err == ESP_OK ? "ok" : esp_err_to_name(ap_err),
+        ap_err == ESP_OK ? ap_info.rssi : 0,
+        ps_err == ESP_OK ? "ok" : esp_err_to_name(ps_err),
+        ps_err == ESP_OK ? (int)ps_type : -1
+    );
+
+    if (ip_err != ESP_OK) {
+        ESP_LOGW(TAG, "%s: esp_netif_get_ip_info failed: %s", name, esp_err_to_name(ip_err));
     }
 }
 
@@ -147,6 +207,9 @@ static void wifi_event_handler(
         s_sta_connected = true;
         s_sta_reconfiguring = false;
 
+        disable_wifi_power_save("wifi_sta_got_ip");
+        wifi_ap_log_sta_status("wifi_sta_got_ip_status");
+
         emit_event(WIFI_AP_EVENT_STA_CONNECTED);
     }
 }
@@ -182,7 +245,11 @@ static esp_err_t wifi_common_init(void)
     }
 
     wifi_init_config_t wifi_init_config = WIFI_INIT_CONFIG_DEFAULT();
+
+    runtime_diag_log("wifi_before_esp_wifi_init");
     ESP_ERROR_CHECK(esp_wifi_init(&wifi_init_config));
+    runtime_diag_log("wifi_after_esp_wifi_init");
+
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
 
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL));
@@ -224,9 +291,13 @@ esp_err_t wifi_ap_start(void)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
 
     if (!s_wifi_started) {
+        runtime_diag_log("wifi_sta_before_esp_wifi_start");
         ESP_ERROR_CHECK(esp_wifi_start());
         s_wifi_started = true;
+        runtime_diag_log("wifi_sta_after_esp_wifi_start");
     }
+
+    disable_wifi_power_save("wifi_ap_start");
 
     s_setup_ap_enabled = true;
 
@@ -258,6 +329,8 @@ esp_err_t wifi_ap_start_sta_only(void)
         s_wifi_started = true;
     }
 
+    disable_wifi_power_save("wifi_sta_only_start");
+
     s_setup_ap_enabled = false;
 
     return ESP_OK;
@@ -283,6 +356,7 @@ static esp_err_t wifi_ap_scan_sync(wifi_ap_scan_result_t *results, uint16_t *cou
         return ESP_ERR_INVALID_ARG;
     }
 
+    runtime_diag_log("wifi_before_scan_start");
     ESP_LOGI(TAG, "Scanning Wi-Fi networks");
 
     wifi_scan_config_t scan_config = {
@@ -332,6 +406,7 @@ static esp_err_t wifi_ap_scan_sync(wifi_ap_scan_result_t *results, uint16_t *cou
     *count = ap_count;
 
     ESP_LOGI(TAG, "Scan done, found %u networks", ap_count);
+    runtime_diag_log("wifi_after_scan_done");
 
     return ESP_OK;
 }
@@ -442,6 +517,7 @@ esp_err_t wifi_ap_connect_sta(const char *ssid, const char *password)
         return ESP_ERR_INVALID_ARG;
     }
 
+    runtime_diag_log("wifi_before_connect_sta");
     ESP_LOGI(TAG, "Connecting STA to SSID: %s", ssid);
 
     wifi_config_t sta_config = {0};
@@ -469,7 +545,11 @@ esp_err_t wifi_ap_connect_sta(const char *ssid, const char *password)
 
     emit_event(WIFI_AP_EVENT_STA_CONNECTING);
 
-    return esp_wifi_connect();
+    runtime_diag_log("wifi_before_esp_wifi_connect");
+    esp_err_t connect_err = esp_wifi_connect();
+    runtime_diag_log("wifi_after_esp_wifi_connect");
+
+    return connect_err;
 }
 
 esp_err_t wifi_ap_disconnect_sta(void)

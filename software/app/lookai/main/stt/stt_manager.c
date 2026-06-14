@@ -7,6 +7,7 @@
 
 #include "audio_playback.h"
 #include "audio_recorder.h"
+#include "runtime_diag.h"
 #include "esp_log.h"
 #include "stt_api_client.h"
 #include "ui_manager.h"
@@ -299,12 +300,15 @@ static void transcribe_task(void *arg)
     char transcript[STT_TRANSCRIPT_BUFFER_SIZE] = {0};
 
     ESP_LOGI(TAG, "Starting STT transcription task");
+    runtime_diag_log("stt_transcribe_task_before_api");
 
     esp_err_t err = stt_api_client_transcribe_wav(
         s_transcribe_path,
         transcript,
         sizeof(transcript)
     );
+
+    runtime_diag_log("stt_transcribe_task_after_api");
 
     if (err == ESP_OK) {
         s_transcribe_success = true;
@@ -340,6 +344,7 @@ static void handle_press(void)
     }
 
     ESP_LOGI(TAG, "TALK pressed");
+    runtime_diag_log("stt_press_begin");
 
     /*
      * Start the real recorder, but do not repaint the STT screen from here.
@@ -381,6 +386,7 @@ static void start_transcription_for_path(const char *path)
     s_transcribe_success = false;
 
     s_state = STT_MANAGER_STATE_TRANSCRIBING;
+    runtime_diag_log("stt_before_transcribing_ui");
     show_temporary_status(
         "Transcribing",
         "Sending audio to STT.",
@@ -395,8 +401,10 @@ static void start_transcription_for_path(const char *path)
      * Give LVGL a short window to draw the "Transcribing" state before the
      * temporary HTTP/TLS task allocates its stack and starts TLS setup.
      */
+    runtime_diag_log("stt_after_transcribing_ui_before_delay");
     vTaskDelay(pdMS_TO_TICKS(STT_TRANSCRIBE_START_DELAY_MS));
 
+    runtime_diag_log("stt_before_transcribe_task_create");
     BaseType_t ok = xTaskCreate(
         transcribe_task,
         "stt_transcribe",
@@ -405,6 +413,8 @@ static void start_transcription_for_path(const char *path)
         STT_TRANSCRIBE_TASK_PRIORITY,
         &s_transcribe_task_handle
     );
+
+    runtime_diag_log("stt_after_transcribe_task_create");
 
     if (ok != pdPASS) {
         s_transcribe_task_handle = NULL;
@@ -421,6 +431,7 @@ static void handle_release(void)
     }
 
     ESP_LOGI(TAG, "TALK released");
+    runtime_diag_log("stt_release_begin");
 
     s_state = STT_MANAGER_STATE_PROCESSING;
     show_temporary_status("Saving", "Preparing recording.", false, true, false, false);

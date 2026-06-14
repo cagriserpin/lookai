@@ -20,12 +20,20 @@
 #include "esp_log.h"
 #include "sdkconfig.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+#include "runtime_diag.h"
+#include "wifi_ap.h"
+
 static const char *TAG = "stt_api_client";
 
 #define STT_API_CLIENT_BOUNDARY "----LookAIFormBoundary7MA4YWxkTrZu0gW"
 #define STT_API_CLIENT_TIMEOUT_MS 60000
 #define STT_API_CLIENT_FILE_CHUNK_SIZE 1024
 #define STT_API_CLIENT_RESPONSE_MAX_BYTES 8192
+#define STT_API_CLIENT_CONNECT_RETRY_COUNT 3
+#define STT_API_CLIENT_CONNECT_RETRY_DELAY_MS 1200
 
 static char s_last_error[192] = "";
 
@@ -418,6 +426,7 @@ esp_err_t stt_api_client_transcribe_wav(
         return ESP_ERR_INVALID_SIZE;
     }
 
+
     esp_http_client_config_t config = {
         .url = CONFIG_LOOKAI_STT_ENDPOINT,
         .method = HTTP_METHOD_POST,
@@ -427,22 +436,52 @@ esp_err_t stt_api_client_transcribe_wav(
         .buffer_size_tx = 1024,
     };
 
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (client == NULL) {
-        fclose(file);
-        set_last_error("Could not initialize HTTP client.");
-        return ESP_FAIL;
+    esp_http_client_handle_t client = NULL;
+    err = ESP_FAIL;
+
+    for (int attempt = 1; attempt <= STT_API_CLIENT_CONNECT_RETRY_COUNT; attempt++) {
+        client = esp_http_client_init(&config);
+        if (client == NULL) {
+            err = ESP_FAIL;
+            set_last_error("Could not initialize HTTP client.");
+            break;
+        }
+
+        esp_http_client_set_header(client, "Authorization", auth_header);
+        esp_http_client_set_header(client, "Content-Type", content_type);
+        esp_http_client_set_header(client, "Accept", "application/json");
+        esp_http_client_set_header(client, "Connection", "close");
+
+        wifi_ap_log_sta_status("stt_api_before_http_open_link");
+        ESP_LOGI(TAG, "Opening STT HTTP connection, attempt %d/%d", attempt, STT_API_CLIENT_CONNECT_RETRY_COUNT);
+        runtime_diag_log("stt_api_before_http_open");
+        err = esp_http_client_open(client, (int)total_len);
+        runtime_diag_log("stt_api_after_http_open");
+
+        if (err == ESP_OK) {
+            break;
+        }
+
+        ESP_LOGW(
+            TAG,
+            "STT HTTP open attempt %d/%d failed: %s",
+            attempt,
+            STT_API_CLIENT_CONNECT_RETRY_COUNT,
+            esp_err_to_name(err)
+        );
+        wifi_ap_log_sta_status("stt_api_http_open_failed_link");
+
+        esp_http_client_cleanup(client);
+        client = NULL;
+
+        if (attempt < STT_API_CLIENT_CONNECT_RETRY_COUNT) {
+            vTaskDelay(pdMS_TO_TICKS(STT_API_CLIENT_CONNECT_RETRY_DELAY_MS * attempt));
+        }
     }
 
-    esp_http_client_set_header(client, "Authorization", auth_header);
-    esp_http_client_set_header(client, "Content-Type", content_type);
-    esp_http_client_set_header(client, "Accept", "application/json");
-
-    err = esp_http_client_open(client, (int)total_len);
     if (err != ESP_OK) {
-        esp_http_client_cleanup(client);
         fclose(file);
-        set_last_error("Could not open HTTP connection: %s", esp_err_to_name(err));
+        set_last_error("Could not open HTTP connection after retries: %s", esp_err_to_name(err));
         return err;
     }
 
@@ -494,6 +533,7 @@ esp_err_t stt_api_client_transcribe_wav(
     }
 
     fclose(file);
+    runtime_diag_log("stt_api_after_upload");
 
     if (err != ESP_OK) {
         esp_http_client_cleanup(client);
@@ -503,10 +543,13 @@ esp_err_t stt_api_client_transcribe_wav(
     esp_http_client_fetch_headers(client);
     int status_code = esp_http_client_get_status_code(client);
 
+    runtime_diag_log("stt_api_before_read_response");
     char *response = NULL;
     err = read_response_body(client, &response);
+    runtime_diag_log("stt_api_after_read_response");
 
     esp_http_client_cleanup(client);
+    runtime_diag_log("stt_api_after_http_cleanup");
 
     if (err != ESP_OK) {
         return err;

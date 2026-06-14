@@ -4,6 +4,8 @@
  */
 
 #include "tts_api_client.h"
+#include "runtime_diag.h"
+#include "wifi_ap.h"
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -18,12 +20,17 @@
 #include "esp_log.h"
 #include "sdkconfig.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
 static const char *TAG = "tts_api_client";
 
 #define TTS_API_CLIENT_TIMEOUT_MS 60000
 #define TTS_API_CLIENT_CHUNK_SIZE 1024
 #define TTS_API_CLIENT_ERROR_RESPONSE_MAX_BYTES 2048
 #define TTS_API_CLIENT_MAX_INPUT_CHARS 800
+#define TTS_API_CLIENT_CONNECT_RETRY_COUNT 3
+#define TTS_API_CLIENT_CONNECT_RETRY_DELAY_MS 1200
 
 static char s_last_error[192] = "";
 
@@ -344,27 +351,58 @@ esp_err_t tts_api_client_generate_wav(
         .buffer_size_tx = 1024,
     };
 
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (client == NULL) {
-        free(request_body);
-        set_last_error("Could not initialize TTS HTTP client.");
-        return ESP_FAIL;
+    esp_http_client_handle_t client = NULL;
+    err = ESP_FAIL;
+
+    for (int attempt = 1; attempt <= TTS_API_CLIENT_CONNECT_RETRY_COUNT; attempt++) {
+        client = esp_http_client_init(&config);
+        if (client == NULL) {
+            err = ESP_FAIL;
+            set_last_error("Could not initialize TTS HTTP client.");
+            break;
+        }
+
+        esp_http_client_set_header(client, "Authorization", auth_header);
+        esp_http_client_set_header(client, "Content-Type", "application/json");
+        esp_http_client_set_header(client, "Accept", "audio/wav");
+        esp_http_client_set_header(client, "Connection", "close");
+
+        wifi_ap_log_sta_status("tts_api_before_http_open_link");
+        ESP_LOGI(TAG, "Opening TTS HTTP connection, attempt %d/%d", attempt, TTS_API_CLIENT_CONNECT_RETRY_COUNT);
+        runtime_diag_log("tts_api_before_http_open");
+        err = esp_http_client_open(client, strlen(request_body));
+        runtime_diag_log("tts_api_after_http_open");
+
+        if (err == ESP_OK) {
+            break;
+        }
+
+        ESP_LOGW(
+            TAG,
+            "TTS HTTP open attempt %d/%d failed: %s",
+            attempt,
+            TTS_API_CLIENT_CONNECT_RETRY_COUNT,
+            esp_err_to_name(err)
+        );
+        wifi_ap_log_sta_status("tts_api_http_open_failed_link");
+
+        esp_http_client_cleanup(client);
+        client = NULL;
+
+        if (attempt < TTS_API_CLIENT_CONNECT_RETRY_COUNT) {
+            vTaskDelay(pdMS_TO_TICKS(TTS_API_CLIENT_CONNECT_RETRY_DELAY_MS * attempt));
+        }
     }
 
-    esp_http_client_set_header(client, "Authorization", auth_header);
-    esp_http_client_set_header(client, "Content-Type", "application/json");
-    esp_http_client_set_header(client, "Accept", "audio/wav");
-
-    err = esp_http_client_open(client, strlen(request_body));
     if (err != ESP_OK) {
-        esp_http_client_cleanup(client);
         free(request_body);
-        set_last_error("Could not open TTS HTTP connection: %s", esp_err_to_name(err));
+        set_last_error("Could not open TTS HTTP connection after retries: %s", esp_err_to_name(err));
         return err;
     }
 
     err = write_all(client, request_body, strlen(request_body));
     free(request_body);
+    runtime_diag_log("tts_api_after_upload");
 
     if (err != ESP_OK) {
         esp_http_client_cleanup(client);
@@ -384,8 +422,10 @@ esp_err_t tts_api_client_generate_wav(
     }
 
     err = save_wav_response(client, out_wav_path, out_wav_bytes);
+    runtime_diag_log("tts_api_after_save_wav");
 
     esp_http_client_cleanup(client);
+    runtime_diag_log("tts_api_after_http_cleanup");
 
     return err;
 }

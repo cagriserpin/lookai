@@ -8,6 +8,7 @@
 #include "audio_playback.h"
 #include "esp_log.h"
 #include "tts_api_client.h"
+#include "runtime_diag.h"
 #include "ui_manager.h"
 #include "wifi_manager.h"
 
@@ -115,11 +116,13 @@ static void generate_task(void *arg)
     ESP_LOGI(TAG, "Starting TTS generation");
 
     uint32_t wav_bytes = 0;
+    runtime_diag_log("tts_manager_before_api");
     esp_err_t err = tts_api_client_generate_wav(
         s_pending_text,
         TTS_OUTPUT_WAV_PATH,
         &wav_bytes
     );
+    runtime_diag_log("tts_manager_after_api");
 
     if (err == ESP_OK) {
         s_generate_success = true;
@@ -195,7 +198,9 @@ static void handle_generate_done(void)
     vTaskDelay(pdMS_TO_TICKS(TTS_PRE_PLAY_DELAY_MS));
 
     audio_playback_result_t playback = {0};
+    runtime_diag_log("tts_manager_before_playback");
     esp_err_t err = audio_playback_play_wav_file(TTS_OUTPUT_WAV_PATH, &playback);
+    runtime_diag_log("tts_manager_after_playback");
 
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "TTS playback failed: %s", esp_err_to_name(err));
