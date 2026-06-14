@@ -9,6 +9,7 @@
 #include "audio_recorder.h"
 #include "runtime_diag.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "stt_api_client.h"
 #include "ui_manager.h"
 #include "wifi_manager.h"
@@ -60,6 +61,25 @@ static stt_manager_state_t s_state = STT_MANAGER_STATE_READY;
 static char s_transcribe_path[STT_PATH_BUFFER_SIZE] = {0};
 static char s_transcribe_result[STT_TRANSCRIPT_BUFFER_SIZE] = {0};
 static bool s_transcribe_success = false;
+
+static int64_t s_stt_flow_start_ms = 0;
+static int64_t s_stt_release_ms = 0;
+static int64_t s_stt_wav_ready_ms = 0;
+static int64_t s_stt_api_task_start_ms = 0;
+
+static int64_t timing_now_ms(void)
+{
+    return esp_timer_get_time() / 1000;
+}
+
+static int64_t timing_since_ms(int64_t start_ms)
+{
+    if (start_ms <= 0) {
+        return -1;
+    }
+
+    return timing_now_ms() - start_ms;
+}
 
 /*
  * Stable UI text is restored after temporary Test/Play states finish.
@@ -300,6 +320,14 @@ static void transcribe_task(void *arg)
     char transcript[STT_TRANSCRIPT_BUFFER_SIZE] = {0};
 
     ESP_LOGI(TAG, "Starting STT transcription task");
+    s_stt_api_task_start_ms = timing_now_ms();
+    ESP_LOGI(
+        TAG,
+        "TIMING STT api_task_start since_release_ms=%lld since_wav_ready_ms=%lld total_ms=%lld",
+        (long long)(s_stt_release_ms > 0 ? s_stt_api_task_start_ms - s_stt_release_ms : -1),
+        (long long)(s_stt_wav_ready_ms > 0 ? s_stt_api_task_start_ms - s_stt_wav_ready_ms : -1),
+        (long long)(s_stt_flow_start_ms > 0 ? s_stt_api_task_start_ms - s_stt_flow_start_ms : -1)
+    );
     runtime_diag_log("stt_transcribe_task_before_api");
 
     esp_err_t err = stt_api_client_transcribe_wav(
@@ -309,6 +337,13 @@ static void transcribe_task(void *arg)
     );
 
     runtime_diag_log("stt_transcribe_task_after_api");
+    ESP_LOGI(
+        TAG,
+        "TIMING STT api_task_done api_ms=%lld total_ms=%lld result=%s",
+        (long long)timing_since_ms(s_stt_api_task_start_ms),
+        (long long)timing_since_ms(s_stt_flow_start_ms),
+        esp_err_to_name(err)
+    );
 
     if (err == ESP_OK) {
         s_transcribe_success = true;
@@ -343,7 +378,13 @@ static void handle_press(void)
         return;
     }
 
+    s_stt_flow_start_ms = timing_now_ms();
+    s_stt_release_ms = 0;
+    s_stt_wav_ready_ms = 0;
+    s_stt_api_task_start_ms = 0;
+
     ESP_LOGI(TAG, "TALK pressed");
+    ESP_LOGI(TAG, "TIMING STT record_start total_ms=0");
     runtime_diag_log("stt_press_begin");
 
     /*
@@ -360,6 +401,12 @@ static void handle_press(void)
     }
 
     s_state = STT_MANAGER_STATE_RECORDING;
+    ESP_LOGI(
+        TAG,
+        "TIMING STT recorder_started setup_ms=%lld total_ms=%lld",
+        (long long)timing_since_ms(s_stt_flow_start_ms),
+        (long long)timing_since_ms(s_stt_flow_start_ms)
+    );
 }
 
 static void start_transcription_for_path(const char *path)
@@ -402,6 +449,13 @@ static void start_transcription_for_path(const char *path)
      * temporary HTTP/TLS task allocates its stack and starts TLS setup.
      */
     runtime_diag_log("stt_after_transcribing_ui_before_delay");
+    ESP_LOGI(
+        TAG,
+        "TIMING STT transcribing_ui_ready since_release_ms=%lld since_wav_ready_ms=%lld total_ms=%lld",
+        (long long)timing_since_ms(s_stt_release_ms),
+        (long long)timing_since_ms(s_stt_wav_ready_ms),
+        (long long)timing_since_ms(s_stt_flow_start_ms)
+    );
     vTaskDelay(pdMS_TO_TICKS(STT_TRANSCRIBE_START_DELAY_MS));
 
     runtime_diag_log("stt_before_transcribe_task_create");
@@ -430,7 +484,15 @@ static void handle_release(void)
         return;
     }
 
+    s_stt_release_ms = timing_now_ms();
+
     ESP_LOGI(TAG, "TALK released");
+    ESP_LOGI(
+        TAG,
+        "TIMING STT record_release held_ms=%lld total_ms=%lld",
+        (long long)(s_stt_flow_start_ms > 0 ? s_stt_release_ms - s_stt_flow_start_ms : -1),
+        (long long)timing_since_ms(s_stt_flow_start_ms)
+    );
     runtime_diag_log("stt_release_begin");
 
     s_state = STT_MANAGER_STATE_PROCESSING;
@@ -445,6 +507,17 @@ static void handle_release(void)
         return;
     }
 
+    s_stt_wav_ready_ms = timing_now_ms();
+    ESP_LOGI(
+        TAG,
+        "TIMING STT wav_ready stop_ms=%lld recorded_ms=%lu pcm_bytes=%lu wav_bytes=%lu total_ms=%lld",
+        (long long)(s_stt_release_ms > 0 ? s_stt_wav_ready_ms - s_stt_release_ms : -1),
+        (unsigned long)result.duration_ms,
+        (unsigned long)result.pcm_bytes,
+        (unsigned long)result.wav_bytes,
+        (long long)timing_since_ms(s_stt_flow_start_ms)
+    );
+
     const char *path = result.path[0] != '\0' ? result.path : audio_recorder_get_path();
     start_transcription_for_path(path);
 }
@@ -455,6 +528,14 @@ static void handle_transcribe_done(void)
         ESP_LOGI(TAG, "Ignoring transcription result because STT is not transcribing");
         return;
     }
+
+    ESP_LOGI(
+        TAG,
+        "TIMING STT transcribe_done_event total_ms=%lld success=%d text_len=%u",
+        (long long)timing_since_ms(s_stt_flow_start_ms),
+        s_transcribe_success ? 1 : 0,
+        (unsigned int)strlen(s_transcribe_result)
+    );
 
     if (!s_transcribe_success) {
         set_error_message(

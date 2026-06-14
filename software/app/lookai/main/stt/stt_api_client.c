@@ -18,13 +18,10 @@
 #include "esp_err.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "sdkconfig.h"
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-
 #include "runtime_diag.h"
-#include "wifi_ap.h"
 
 static const char *TAG = "stt_api_client";
 
@@ -32,10 +29,22 @@ static const char *TAG = "stt_api_client";
 #define STT_API_CLIENT_TIMEOUT_MS 60000
 #define STT_API_CLIENT_FILE_CHUNK_SIZE 1024
 #define STT_API_CLIENT_RESPONSE_MAX_BYTES 8192
-#define STT_API_CLIENT_CONNECT_RETRY_COUNT 3
-#define STT_API_CLIENT_CONNECT_RETRY_DELAY_MS 1200
 
 static char s_last_error[192] = "";
+
+static int64_t timing_now_ms(void)
+{
+    return esp_timer_get_time() / 1000;
+}
+
+static int64_t timing_since_ms(int64_t start_ms)
+{
+    if (start_ms <= 0) {
+        return -1;
+    }
+
+    return timing_now_ms() - start_ms;
+}
 
 const char *stt_api_client_get_last_error(void)
 {
@@ -298,8 +307,16 @@ esp_err_t stt_api_client_transcribe_wav(
         return ESP_ERR_INVALID_ARG;
     }
 
+    int64_t api_start_ms = timing_now_ms();
+    int64_t open_start_ms = 0;
+    int64_t upload_start_ms = 0;
+    int64_t headers_start_ms = 0;
+    int64_t read_start_ms = 0;
+    int64_t parse_start_ms = 0;
+
     out_text[0] = '\0';
     s_last_error[0] = '\0';
+    ESP_LOGI(TAG, "TIMING STT_API start total_ms=0");
 
     if (config_string_is_empty(CONFIG_LOOKAI_STT_API_KEY)) {
         set_last_error("STT API key is not configured.");
@@ -398,6 +415,15 @@ esp_err_t stt_api_client_transcribe_wav(
         return ESP_ERR_INVALID_SIZE;
     }
 
+    ESP_LOGI(
+        TAG,
+        "TIMING STT_API request_prepared wav_bytes=%ld multipart_bytes=%u prepare_ms=%lld total_ms=%lld",
+        (long)st.st_size,
+        (unsigned int)total_len,
+        (long long)timing_since_ms(api_start_ms),
+        (long long)timing_since_ms(api_start_ms)
+    );
+
     char auth_header[512];
     int auth_written = snprintf(
         auth_header,
@@ -436,55 +462,36 @@ esp_err_t stt_api_client_transcribe_wav(
         .buffer_size_tx = 1024,
     };
 
-    esp_http_client_handle_t client = NULL;
-    err = ESP_FAIL;
-
-    for (int attempt = 1; attempt <= STT_API_CLIENT_CONNECT_RETRY_COUNT; attempt++) {
-        client = esp_http_client_init(&config);
-        if (client == NULL) {
-            err = ESP_FAIL;
-            set_last_error("Could not initialize HTTP client.");
-            break;
-        }
-
-        esp_http_client_set_header(client, "Authorization", auth_header);
-        esp_http_client_set_header(client, "Content-Type", content_type);
-        esp_http_client_set_header(client, "Accept", "application/json");
-        esp_http_client_set_header(client, "Connection", "close");
-
-        wifi_ap_log_sta_status("stt_api_before_http_open_link");
-        ESP_LOGI(TAG, "Opening STT HTTP connection, attempt %d/%d", attempt, STT_API_CLIENT_CONNECT_RETRY_COUNT);
-        runtime_diag_log("stt_api_before_http_open");
-        err = esp_http_client_open(client, (int)total_len);
-        runtime_diag_log("stt_api_after_http_open");
-
-        if (err == ESP_OK) {
-            break;
-        }
-
-        ESP_LOGW(
-            TAG,
-            "STT HTTP open attempt %d/%d failed: %s",
-            attempt,
-            STT_API_CLIENT_CONNECT_RETRY_COUNT,
-            esp_err_to_name(err)
-        );
-        wifi_ap_log_sta_status("stt_api_http_open_failed_link");
-
-        esp_http_client_cleanup(client);
-        client = NULL;
-
-        if (attempt < STT_API_CLIENT_CONNECT_RETRY_COUNT) {
-            vTaskDelay(pdMS_TO_TICKS(STT_API_CLIENT_CONNECT_RETRY_DELAY_MS * attempt));
-        }
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (client == NULL) {
+        fclose(file);
+        set_last_error("Could not initialize HTTP client.");
+        return ESP_FAIL;
     }
 
+    esp_http_client_set_header(client, "Authorization", auth_header);
+    esp_http_client_set_header(client, "Content-Type", content_type);
+    esp_http_client_set_header(client, "Accept", "application/json");
+
+    runtime_diag_log("stt_api_before_http_open");
+    open_start_ms = timing_now_ms();
+    err = esp_http_client_open(client, (int)total_len);
+    runtime_diag_log("stt_api_after_http_open");
+    ESP_LOGI(
+        TAG,
+        "TIMING STT_API http_open open_ms=%lld total_ms=%lld result=%s",
+        (long long)timing_since_ms(open_start_ms),
+        (long long)timing_since_ms(api_start_ms),
+        esp_err_to_name(err)
+    );
     if (err != ESP_OK) {
+        esp_http_client_cleanup(client);
         fclose(file);
-        set_last_error("Could not open HTTP connection after retries: %s", esp_err_to_name(err));
+        set_last_error("Could not open HTTP connection: %s", esp_err_to_name(err));
         return err;
     }
 
+    upload_start_ms = timing_now_ms();
     err = write_all(client, model_part, strlen(model_part));
     if (err == ESP_OK && language_part[0] != '\0') {
         err = write_all(client, language_part, strlen(language_part));
@@ -505,6 +512,8 @@ esp_err_t stt_api_client_transcribe_wav(
         }
     }
 
+    uint32_t uploaded_file_bytes = 0;
+
     while (err == ESP_OK) {
         size_t bytes_read = fread(chunk, 1, STT_API_CLIENT_FILE_CHUNK_SIZE, file);
 
@@ -513,6 +522,7 @@ esp_err_t stt_api_client_transcribe_wav(
             if (err != ESP_OK) {
                 break;
             }
+            uploaded_file_bytes += (uint32_t)bytes_read;
         }
 
         if (bytes_read < STT_API_CLIENT_FILE_CHUNK_SIZE) {
@@ -534,19 +544,45 @@ esp_err_t stt_api_client_transcribe_wav(
 
     fclose(file);
     runtime_diag_log("stt_api_after_upload");
+    ESP_LOGI(
+        TAG,
+        "TIMING STT_API upload upload_ms=%lld wav_uploaded=%lu total_ms=%lld result=%s",
+        (long long)timing_since_ms(upload_start_ms),
+        (unsigned long)uploaded_file_bytes,
+        (long long)timing_since_ms(api_start_ms),
+        esp_err_to_name(err)
+    );
 
     if (err != ESP_OK) {
         esp_http_client_cleanup(client);
         return err;
     }
 
-    esp_http_client_fetch_headers(client);
+    headers_start_ms = timing_now_ms();
+    int64_t content_length = esp_http_client_fetch_headers(client);
     int status_code = esp_http_client_get_status_code(client);
+    ESP_LOGI(
+        TAG,
+        "TIMING STT_API headers headers_ms=%lld status=%d content_length=%lld total_ms=%lld",
+        (long long)timing_since_ms(headers_start_ms),
+        status_code,
+        (long long)content_length,
+        (long long)timing_since_ms(api_start_ms)
+    );
 
     runtime_diag_log("stt_api_before_read_response");
     char *response = NULL;
+    read_start_ms = timing_now_ms();
     err = read_response_body(client, &response);
     runtime_diag_log("stt_api_after_read_response");
+    ESP_LOGI(
+        TAG,
+        "TIMING STT_API read_response read_ms=%lld response_bytes=%u total_ms=%lld result=%s",
+        (long long)timing_since_ms(read_start_ms),
+        (unsigned int)(response != NULL ? strlen(response) : 0),
+        (long long)timing_since_ms(api_start_ms),
+        esp_err_to_name(err)
+    );
 
     esp_http_client_cleanup(client);
     runtime_diag_log("stt_api_after_http_cleanup");
@@ -558,15 +594,37 @@ esp_err_t stt_api_client_transcribe_wav(
     if (status_code != 200) {
         set_error_from_api_response(status_code, response);
         free(response);
+        ESP_LOGI(
+            TAG,
+            "TIMING STT_API done total_ms=%lld result=HTTP_%d",
+            (long long)timing_since_ms(api_start_ms),
+            status_code
+        );
         return ESP_FAIL;
     }
 
+    parse_start_ms = timing_now_ms();
     err = parse_transcript_response(response, out_text, out_text_size);
     free(response);
+    ESP_LOGI(
+        TAG,
+        "TIMING STT_API parse parse_ms=%lld text_len=%u total_ms=%lld result=%s",
+        (long long)timing_since_ms(parse_start_ms),
+        (unsigned int)strlen(out_text),
+        (long long)timing_since_ms(api_start_ms),
+        esp_err_to_name(err)
+    );
 
     if (err == ESP_OK) {
         ESP_LOGI(TAG, "Transcription request completed");
     }
+
+    ESP_LOGI(
+        TAG,
+        "TIMING STT_API done total_ms=%lld result=%s",
+        (long long)timing_since_ms(api_start_ms),
+        esp_err_to_name(err)
+    );
 
     return err;
 }

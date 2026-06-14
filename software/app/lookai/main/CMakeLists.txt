@@ -76,4 +76,5 @@ idf_component_register(
         json
         esp-tls
         esp_http_client
+        esp_timer
 )

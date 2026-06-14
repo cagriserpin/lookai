@@ -7,6 +7,7 @@
 
 #include "audio_playback.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "tts_api_client.h"
 #include "runtime_diag.h"
 #include "ui_manager.h"
@@ -56,6 +57,25 @@ static char s_pending_text[TTS_TEXT_BUFFER_SIZE] = {0};
 static char s_generate_error[TTS_RESULT_BUFFER_SIZE] = {0};
 static uint32_t s_generated_wav_bytes = 0;
 static bool s_generate_success = false;
+
+static int64_t s_tts_flow_start_ms = 0;
+static int64_t s_tts_api_start_ms = 0;
+static int64_t s_tts_api_done_ms = 0;
+static int64_t s_tts_playback_start_ms = 0;
+
+static int64_t timing_now_ms(void)
+{
+    return esp_timer_get_time() / 1000;
+}
+
+static int64_t timing_since_ms(int64_t start_ms)
+{
+    if (start_ms <= 0) {
+        return -1;
+    }
+
+    return timing_now_ms() - start_ms;
+}
 
 static void update_tts_ui(const char *status, const char *result, bool busy)
 {
@@ -114,6 +134,12 @@ static void generate_task(void *arg)
     (void)arg;
 
     ESP_LOGI(TAG, "Starting TTS generation");
+    s_tts_api_start_ms = timing_now_ms();
+    ESP_LOGI(
+        TAG,
+        "TIMING TTS api_task_start since_request_ms=%lld",
+        (long long)timing_since_ms(s_tts_flow_start_ms)
+    );
 
     uint32_t wav_bytes = 0;
     runtime_diag_log("tts_manager_before_api");
@@ -123,6 +149,15 @@ static void generate_task(void *arg)
         &wav_bytes
     );
     runtime_diag_log("tts_manager_after_api");
+    s_tts_api_done_ms = timing_now_ms();
+    ESP_LOGI(
+        TAG,
+        "TIMING TTS api_task_done api_ms=%lld total_ms=%lld wav_bytes=%lu result=%s",
+        (long long)(s_tts_api_start_ms > 0 ? s_tts_api_done_ms - s_tts_api_start_ms : -1),
+        (long long)timing_since_ms(s_tts_flow_start_ms),
+        (unsigned long)wav_bytes,
+        esp_err_to_name(err)
+    );
 
     if (err == ESP_OK) {
         s_generate_success = true;
@@ -155,6 +190,14 @@ static void handle_generate_done(void)
         ESP_LOGI(TAG, "Ignoring TTS generation result because state changed");
         return;
     }
+
+    ESP_LOGI(
+        TAG,
+        "TIMING TTS generate_done_event since_api_done_ms=%lld total_ms=%lld success=%d",
+        (long long)timing_since_ms(s_tts_api_done_ms),
+        (long long)timing_since_ms(s_tts_flow_start_ms),
+        s_generate_success ? 1 : 0
+    );
 
     /*
      * Let the worker task delete itself and give the system a moment to return
@@ -198,9 +241,24 @@ static void handle_generate_done(void)
     vTaskDelay(pdMS_TO_TICKS(TTS_PRE_PLAY_DELAY_MS));
 
     audio_playback_result_t playback = {0};
+    s_tts_playback_start_ms = timing_now_ms();
+    ESP_LOGI(
+        TAG,
+        "TIMING TTS playback_start since_api_done_ms=%lld time_to_first_audio_ms=%lld",
+        (long long)(s_tts_api_done_ms > 0 ? s_tts_playback_start_ms - s_tts_api_done_ms : -1),
+        (long long)timing_since_ms(s_tts_flow_start_ms)
+    );
     runtime_diag_log("tts_manager_before_playback");
     esp_err_t err = audio_playback_play_wav_file(TTS_OUTPUT_WAV_PATH, &playback);
     runtime_diag_log("tts_manager_after_playback");
+    ESP_LOGI(
+        TAG,
+        "TIMING TTS playback_done playback_ms=%lld played_ms=%lu total_ms=%lld result=%s",
+        (long long)timing_since_ms(s_tts_playback_start_ms),
+        (unsigned long)playback.duration_ms,
+        (long long)timing_since_ms(s_tts_flow_start_ms),
+        esp_err_to_name(err)
+    );
 
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "TTS playback failed: %s", esp_err_to_name(err));
@@ -237,6 +295,17 @@ static void handle_speak_request(const char *text)
         return;
     }
 
+    s_tts_flow_start_ms = timing_now_ms();
+    s_tts_api_start_ms = 0;
+    s_tts_api_done_ms = 0;
+    s_tts_playback_start_ms = 0;
+
+    ESP_LOGI(
+        TAG,
+        "TIMING TTS request_start text_len=%u total_ms=0",
+        (unsigned int)strlen(text)
+    );
+
     snprintf(s_pending_text, sizeof(s_pending_text), "%s", text);
     s_generate_error[0] = '\0';
     s_generated_wav_bytes = 0;
@@ -254,6 +323,12 @@ static void handle_speak_request(const char *text)
      * starts allocating memory.
      */
     vTaskDelay(pdMS_TO_TICKS(TTS_GENERATE_START_DELAY_MS));
+    ESP_LOGI(
+        TAG,
+        "TIMING TTS before_task_create ui_delay_ms=%d total_ms=%lld",
+        TTS_GENERATE_START_DELAY_MS,
+        (long long)timing_since_ms(s_tts_flow_start_ms)
+    );
 
     BaseType_t ok = xTaskCreate(
         generate_task,
@@ -262,6 +337,13 @@ static void handle_speak_request(const char *text)
         NULL,
         TTS_GENERATE_TASK_PRIORITY,
         &s_generate_task_handle
+    );
+
+    ESP_LOGI(
+        TAG,
+        "TIMING TTS after_task_create total_ms=%lld result=%s",
+        (long long)timing_since_ms(s_tts_flow_start_ms),
+        ok == pdPASS ? "pdPASS" : "pdFAIL"
     );
 
     if (ok != pdPASS) {
