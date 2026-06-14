@@ -33,11 +33,11 @@ static const char *TAG = "tts_manager";
 #define TTS_PRE_PLAY_DELAY_MS 100
 #define TTS_TEXT_BUFFER_SIZE 224
 #define TTS_RESULT_BUFFER_SIZE 1024
-#define TTS_OUTPUT_WAV_PATH "/spiffs/tts_last.wav"
 
 typedef enum {
     TTS_MANAGER_EVENT_SAMPLE_1 = 0,
     TTS_MANAGER_EVENT_SAMPLE_2,
+    TTS_MANAGER_EVENT_STREAM_PLAYBACK_STARTED,
     TTS_MANAGER_EVENT_GENERATE_DONE,
 } tts_manager_event_t;
 
@@ -55,7 +55,8 @@ static TaskHandle_t s_generate_task_handle = NULL;
 static tts_manager_state_t s_state = TTS_MANAGER_STATE_READY;
 static char s_pending_text[TTS_TEXT_BUFFER_SIZE] = {0};
 static char s_generate_error[TTS_RESULT_BUFFER_SIZE] = {0};
-static uint32_t s_generated_wav_bytes = 0;
+static uint32_t s_generated_pcm_bytes = 0;
+static audio_playback_result_t s_stream_playback_result = {0};
 static bool s_generate_success = false;
 
 static int64_t s_tts_flow_start_ms = 0;
@@ -129,6 +130,12 @@ static const char *text_for_event(tts_manager_event_t event)
     }
 }
 
+static void tts_stream_playback_started_callback(void *user_ctx)
+{
+    (void)user_ctx;
+    post_event(TTS_MANAGER_EVENT_STREAM_PLAYBACK_STARTED);
+}
+
 static void generate_task(void *arg)
 {
     (void)arg;
@@ -141,33 +148,43 @@ static void generate_task(void *arg)
         (long long)timing_since_ms(s_tts_flow_start_ms)
     );
 
-    uint32_t wav_bytes = 0;
+    uint32_t pcm_bytes = 0;
+    audio_playback_result_t playback = {0};
+    tts_api_client_stream_callbacks_t stream_callbacks = {
+        .on_playback_started = tts_stream_playback_started_callback,
+        .user_ctx = NULL,
+    };
+
     runtime_diag_log("tts_manager_before_api");
-    esp_err_t err = tts_api_client_generate_wav(
+    esp_err_t err = tts_api_client_generate_pcm_streaming(
         s_pending_text,
-        TTS_OUTPUT_WAV_PATH,
-        &wav_bytes
+        &pcm_bytes,
+        &playback,
+        &stream_callbacks
     );
     runtime_diag_log("tts_manager_after_api");
     s_tts_api_done_ms = timing_now_ms();
     ESP_LOGI(
         TAG,
-        "TIMING TTS api_task_done api_ms=%lld total_ms=%lld wav_bytes=%lu result=%s",
+        "TIMING TTS api_pcm_stream_done api_ms=%lld total_ms=%lld pcm_bytes=%lu played_ms=%lu result=%s",
         (long long)(s_tts_api_start_ms > 0 ? s_tts_api_done_ms - s_tts_api_start_ms : -1),
         (long long)timing_since_ms(s_tts_flow_start_ms),
-        (unsigned long)wav_bytes,
+        (unsigned long)pcm_bytes,
+        (unsigned long)playback.duration_ms,
         esp_err_to_name(err)
     );
 
     if (err == ESP_OK) {
         s_generate_success = true;
-        s_generated_wav_bytes = wav_bytes;
+        s_generated_pcm_bytes = pcm_bytes;
+        s_stream_playback_result = playback;
         s_generate_error[0] = '\0';
     } else {
         const char *api_error = tts_api_client_get_last_error();
 
         s_generate_success = false;
-        s_generated_wav_bytes = 0;
+        s_generated_pcm_bytes = 0;
+        memset(&s_stream_playback_result, 0, sizeof(s_stream_playback_result));
         snprintf(
             s_generate_error,
             sizeof(s_generate_error),
@@ -184,9 +201,39 @@ static void generate_task(void *arg)
     vTaskDelete(NULL);
 }
 
-static void handle_generate_done(void)
+static void handle_stream_playback_started(void)
 {
     if (s_state != TTS_MANAGER_STATE_GENERATING) {
+        return;
+    }
+
+    s_state = TTS_MANAGER_STATE_PLAYING;
+    s_tts_playback_start_ms = timing_now_ms();
+
+    ESP_LOGI(
+        TAG,
+        "TIMING TTS stream_playback_started total_ms=%lld",
+        (long long)timing_since_ms(s_tts_flow_start_ms)
+    );
+
+    char details[TTS_RESULT_BUFFER_SIZE];
+    snprintf(
+        details,
+        sizeof(details),
+        "Streaming audio...\nText: %s",
+        s_pending_text
+    );
+
+    update_tts_ui(
+        "Playing",
+        details,
+        true
+    );
+}
+
+static void handle_generate_done(void)
+{
+    if (s_state != TTS_MANAGER_STATE_GENERATING && s_state != TTS_MANAGER_STATE_PLAYING) {
         ESP_LOGI(TAG, "Ignoring TTS generation result because state changed");
         return;
     }
@@ -199,13 +246,6 @@ static void handle_generate_done(void)
         s_generate_success ? 1 : 0
     );
 
-    /*
-     * Let the worker task delete itself and give the system a moment to return
-     * its TLS stack/heap pressure before LVGL tries to redraw and before audio
-     * playback starts.
-     */
-    vTaskDelay(pdMS_TO_TICKS(TTS_POST_GENERATE_DELAY_MS));
-
     if (!s_generate_success) {
         set_error_message(
             s_generate_error[0] != '\0' ?
@@ -215,56 +255,13 @@ static void handle_generate_done(void)
         return;
     }
 
-    char details[TTS_RESULT_BUFFER_SIZE];
-    float kb = (float)s_generated_wav_bytes / 1024.0f;
-
-    snprintf(
-        details,
-        sizeof(details),
-        "File: %s\nSize: %.1f KB\nText: %s",
-        TTS_OUTPUT_WAV_PATH,
-        kb,
-        s_pending_text
-    );
-
-    s_state = TTS_MANAGER_STATE_PLAYING;
-    update_tts_ui(
-        "Playing",
-        details,
-        true
-    );
-
-    /*
-     * Give the display a short window to draw the Playing state while the
-     * heavyweight HTTP/TLS task is already gone.
-     */
-    vTaskDelay(pdMS_TO_TICKS(TTS_PRE_PLAY_DELAY_MS));
-
-    audio_playback_result_t playback = {0};
-    s_tts_playback_start_ms = timing_now_ms();
     ESP_LOGI(
         TAG,
-        "TIMING TTS playback_start since_api_done_ms=%lld time_to_first_audio_ms=%lld",
-        (long long)(s_tts_api_done_ms > 0 ? s_tts_playback_start_ms - s_tts_api_done_ms : -1),
+        "TIMING TTS stream_done played_ms=%lu pcm_bytes=%lu total_ms=%lld",
+        (unsigned long)s_stream_playback_result.duration_ms,
+        (unsigned long)s_stream_playback_result.pcm_bytes,
         (long long)timing_since_ms(s_tts_flow_start_ms)
     );
-    runtime_diag_log("tts_manager_before_playback");
-    esp_err_t err = audio_playback_play_wav_file(TTS_OUTPUT_WAV_PATH, &playback);
-    runtime_diag_log("tts_manager_after_playback");
-    ESP_LOGI(
-        TAG,
-        "TIMING TTS playback_done playback_ms=%lld played_ms=%lu total_ms=%lld result=%s",
-        (long long)timing_since_ms(s_tts_playback_start_ms),
-        (unsigned long)playback.duration_ms,
-        (long long)timing_since_ms(s_tts_flow_start_ms),
-        esp_err_to_name(err)
-    );
-
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "TTS playback failed: %s", esp_err_to_name(err));
-        set_error_message("Could not play generated speech.");
-        return;
-    }
 
     s_state = TTS_MANAGER_STATE_READY;
     update_tts_ui(
@@ -308,7 +305,8 @@ static void handle_speak_request(const char *text)
 
     snprintf(s_pending_text, sizeof(s_pending_text), "%s", text);
     s_generate_error[0] = '\0';
-    s_generated_wav_bytes = 0;
+    s_generated_pcm_bytes = 0;
+    memset(&s_stream_playback_result, 0, sizeof(s_stream_playback_result));
     s_generate_success = false;
 
     s_state = TTS_MANAGER_STATE_GENERATING;
@@ -374,6 +372,10 @@ static void tts_task(void *arg)
             case TTS_MANAGER_EVENT_SAMPLE_1:
             case TTS_MANAGER_EVENT_SAMPLE_2:
                 handle_speak_request(text_for_event(event));
+                break;
+
+            case TTS_MANAGER_EVENT_STREAM_PLAYBACK_STARTED:
+                handle_stream_playback_started();
                 break;
 
             case TTS_MANAGER_EVENT_GENERATE_DONE:
