@@ -1,6 +1,6 @@
 /**
  * @file tts/tts_api_client.c
- * @brief OpenAI-compatible text-to-speech API client.
+ * @brief OpenAI text-to-speech API client.
  */
 
 #include "tts_api_client.h"
@@ -23,7 +23,7 @@ static const char *TAG = "tts_api_client";
 #define TTS_API_CLIENT_TIMEOUT_MS 60000
 #define TTS_API_CLIENT_CHUNK_SIZE 1024
 #define TTS_API_CLIENT_ERROR_RESPONSE_MAX_BYTES 2048
-#define TTS_API_CLIENT_MAX_INPUT_CHARS 200
+#define TTS_API_CLIENT_MAX_INPUT_CHARS 800
 
 static char s_last_error[192] = "";
 
@@ -57,6 +57,11 @@ static const char *select_api_key(void)
     return CONFIG_LOOKAI_STT_API_KEY;
 }
 
+static bool tts_model_supports_instructions(void)
+{
+    return strcmp(CONFIG_LOOKAI_TTS_MODEL, "gpt-4o-mini-tts") == 0;
+}
+
 static esp_err_t build_request_body(const char *text, char **out_body)
 {
     if (text == NULL || out_body == NULL) {
@@ -64,7 +69,7 @@ static esp_err_t build_request_body(const char *text, char **out_body)
     }
 
     if (strlen(text) > TTS_API_CLIENT_MAX_INPUT_CHARS) {
-        set_last_error("TTS input is longer than 200 characters.");
+        set_last_error("TTS input is longer than 800 characters.");
         return ESP_ERR_INVALID_SIZE;
     }
 
@@ -78,6 +83,14 @@ static esp_err_t build_request_body(const char *text, char **out_body)
     cJSON_AddStringToObject(root, "voice", CONFIG_LOOKAI_TTS_VOICE);
     cJSON_AddStringToObject(root, "input", text);
     cJSON_AddStringToObject(root, "response_format", CONFIG_LOOKAI_TTS_RESPONSE_FORMAT);
+
+    if (tts_model_supports_instructions()) {
+        cJSON_AddStringToObject(
+            root,
+            "instructions",
+            "Turkceyi dogal, net ve sicak bir tonda konus. Cumleleri sakin ve anlasilir oku."
+        );
+    }
 
     char *body = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);

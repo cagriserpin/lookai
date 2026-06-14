@@ -1,6 +1,6 @@
 /**
  * @file tts/tts_api_client.h
- * @brief OpenAI-compatible text-to-speech API client.
+ * @brief OpenAI text-to-speech API client.
  */
 
 #pragma once
@@ -11,7 +11,7 @@
 #include "esp_err.h"
 
 /**
- * @brief Generate a WAV file from text using the configured TTS provider.
+ * @brief Generate a WAV file from text using the configured OpenAI TTS endpoint.
  *
  * @param text Text to synthesize.
  * @param out_wav_path Destination WAV path on the local filesystem.

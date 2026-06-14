@@ -177,7 +177,7 @@ void tts_screen_render(
 
     lv_obj_t *sample_2 = create_sample_card(
         container,
-        "I can speak using Groq TTS.",
+        "Sana nasil yardimci olabilirim?",
         sample_2_event_cb,
         callbacks
     );

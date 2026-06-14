@@ -5,22 +5,23 @@ menu "LookAI"
         default ""
         help
             API key used by the LookAI STT client.
-            For Groq, paste your Groq API key here.
+            For OpenAI, paste your OpenAI API key here.
             Keep this private. Do not print this value in logs.
 
     config LOOKAI_STT_ENDPOINT
         string "STT endpoint"
-        default "https://api.groq.com/openai/v1/audio/transcriptions"
+        default "https://api.openai.com/v1/audio/transcriptions"
         help
-            OpenAI-compatible audio transcription endpoint.
-            Default value uses Groq's OpenAI-compatible transcription endpoint.
+            Audio transcription endpoint.
+            Default value uses OpenAI's transcription endpoint.
 
     config LOOKAI_STT_MODEL
         string "STT model"
-        default "whisper-large-v3-turbo"
+        default "gpt-4o-mini-transcribe"
         help
             Audio transcription model used by the STT API client.
-            For Groq, use whisper-large-v3-turbo or whisper-large-v3.
+            For OpenAI, use gpt-4o-mini-transcribe for low-cost tests or
+            gpt-4o-transcribe for higher quality.
 
     config LOOKAI_STT_LANGUAGE
         string "STT language code"
@@ -34,33 +35,36 @@ menu "LookAI"
         default ""
         help
             Optional API key used by the LookAI TTS client.
-            Leave empty to reuse LOOKAI_STT_API_KEY for Groq.
+            Leave empty to reuse LOOKAI_STT_API_KEY for OpenAI.
 
     config LOOKAI_TTS_ENDPOINT
         string "TTS endpoint"
-        default "https://api.groq.com/openai/v1/audio/speech"
+        default "https://api.openai.com/v1/audio/speech"
         help
-            OpenAI-compatible audio speech endpoint.
-            Default value uses Groq's text-to-speech endpoint.
+            Text-to-speech endpoint.
+            Default value uses OpenAI's speech endpoint.
 
     config LOOKAI_TTS_MODEL
         string "TTS model"
-        default "canopylabs/orpheus-v1-english"
+        default "gpt-4o-mini-tts"
         help
             Text-to-speech model used by the TTS API client.
-            Groq currently supports canopylabs/orpheus-v1-english and canopylabs/orpheus-arabic-saudi.
+            For OpenAI, use gpt-4o-mini-tts for instruction-aware speech,
+            or tts-1 / tts-1-hd if you intentionally select those models.
 
     config LOOKAI_TTS_VOICE
         string "TTS voice"
-        default "hannah"
+        default "marin"
         help
-            Voice persona ID used by the TTS API client.
-            English voices include autumn, diana, hannah, austin, daniel, and troy.
+            Voice ID used by the TTS API client.
+            OpenAI voices include marin, cedar, alloy, ash, ballad, coral,
+            echo, fable, nova, onyx, sage, shimmer, and verse.
 
     config LOOKAI_TTS_RESPONSE_FORMAT
         string "TTS response format"
         default "wav"
         help
-            Audio response format for generated speech. Groq Orpheus currently supports wav.
+            Audio response format for generated speech. Keep wav so the
+            device can save /spiffs/tts_last.wav and play it with the WAV player.
 
 endmenu

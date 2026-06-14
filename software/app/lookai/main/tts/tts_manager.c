@@ -98,10 +98,10 @@ static const char *text_for_event(tts_manager_event_t event)
 {
     switch (event) {
         case TTS_MANAGER_EVENT_SAMPLE_1:
-            return "Merhaba! Ben LookAI";
+            return "Merhaba! Ben LookAI.";
 
         case TTS_MANAGER_EVENT_SAMPLE_2:
-            return "I can speak using Groq TTS.";
+            return "Sana nasıl yardımcı olabilirim?";
 
         default:
             return "";

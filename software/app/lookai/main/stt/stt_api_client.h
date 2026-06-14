@@ -12,8 +12,8 @@
 /**
  * @brief Transcribe a WAV file with the configured STT provider.
  *
- * The client uses an OpenAI-compatible multipart transcription endpoint.
- * The default project configuration points to Groq.
+ * The client uses a multipart transcription endpoint.
+ * The default project configuration points to OpenAI.
  *
  * @param wav_path Path to a WAV file on the local filesystem.
  * @param out_text Destination buffer for the transcript text.
