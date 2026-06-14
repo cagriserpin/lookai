@@ -5,6 +5,7 @@
 
 #include "app_controller.h"
 
+#include "ai_manager.h"
 #include "audio_playback.h"
 #include "audio_recorder.h"
 #include "esp_check.h"
@@ -60,6 +61,7 @@ esp_err_t app_controller_start(void)
     }
 
     ESP_RETURN_ON_ERROR(stt_manager_start(), TAG, "Failed to start STT manager");
+    ESP_RETURN_ON_ERROR(ai_manager_start(), TAG, "Failed to start AI manager");
     ESP_RETURN_ON_ERROR(tts_manager_start(), TAG, "Failed to start TTS manager");
 
     ui_manager_callbacks_t callbacks = {
@@ -71,6 +73,8 @@ esp_err_t app_controller_start(void)
         .stt_release = stt_manager_release,
         .stt_test_speaker = stt_manager_toggle_speaker_test,
         .stt_play_recording = stt_manager_play_recording,
+        .ai_press = ai_manager_press,
+        .ai_release = ai_manager_release,
         .tts_sample_1 = tts_manager_speak_sample_1,
         .tts_sample_2 = tts_manager_speak_sample_2,
     };

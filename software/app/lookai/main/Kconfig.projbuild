@@ -30,6 +30,49 @@ menu "LookAI"
             Optional ISO-639-1 language code for the input audio.
             Use an empty value to let the API auto-detect the language.
 
+
+    config LOOKAI_AI_API_KEY
+        string "AI API key"
+        default ""
+        help
+            Optional API key used by the LookAI AI prompt client.
+            Leave empty to reuse LOOKAI_STT_API_KEY for OpenAI.
+
+    config LOOKAI_AI_ENDPOINT
+        string "AI endpoint"
+        default "https://api.openai.com/v1/chat/completions"
+        help
+            Chat/prompt endpoint used by the AI assistant.
+            Default value uses OpenAI's chat completions endpoint.
+
+    config LOOKAI_AI_MODEL
+        string "AI model"
+        default "gpt-4o-mini"
+        help
+            Text model used by the AI assistant prompt client.
+
+    config LOOKAI_AI_SYSTEM_PROMPT
+        string "AI system prompt"
+        default "Kisa, net ve Turkce cevap ver. Sesli okunacagi icin en fazla 2-3 cumle kullan."
+        help
+            System prompt sent before the recognized user speech.
+            Keep responses short so TTS can start quickly.
+
+    config LOOKAI_AI_MAX_TOKENS
+        int "AI max output tokens"
+        default 160
+        range 32 512
+        help
+            max_tokens value sent to the OpenAI-compatible chat endpoint.
+
+    config LOOKAI_AI_MAX_OUTPUT_CHARS
+        int "AI max output characters"
+        default 600
+        range 64 760
+        help
+            Local character limit copied from the AI response before TTS.
+            Keep this under the TTS client's input limit.
+
     config LOOKAI_TTS_API_KEY
         string "TTS API key"
         default ""

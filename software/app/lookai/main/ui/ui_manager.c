@@ -16,6 +16,7 @@
 
 #include "lookai_display.h"
 
+#include "ai_screen.h"
 #include "brightness/brightness_screen.h"
 #include "wifi/manage_networks_screen.h"
 #include "menu_controller.h"
@@ -53,6 +54,11 @@ static ui_manager_state_t s_state = {
     .stt_processing = false,
     .stt_speaker_test_active = false,
     .stt_recording_playback_active = false,
+    .ai_status = "Ready",
+    .ai_result = "Hold TALK to ask AI.",
+    .ai_recording = false,
+    .ai_busy = false,
+    .ai_speaking = false,
     .tts_status = "Ready",
     .tts_result = "Select a sample text.",
     .tts_busy = false,
@@ -83,6 +89,9 @@ static const char *get_current_title(void)
         case MENU_SCREEN_STT:
             return "Speech to Text";
 
+        case MENU_SCREEN_AI:
+            return "AI Assistant";
+
         case MENU_SCREEN_TTS:
             return "Text to Speech";
 
@@ -103,6 +112,7 @@ static ui_scaffold_title_icon_t get_current_title_icon(void)
             return UI_SCAFFOLD_TITLE_ICON_BRIGHTNESS;
 
         case MENU_SCREEN_STT:
+        case MENU_SCREEN_AI:
         case MENU_SCREEN_TTS:
             return UI_SCAFFOLD_TITLE_ICON_NONE;
 
@@ -164,6 +174,14 @@ static void stt_button_event_cb(lv_event_t *event)
         runtime_diag_log("ui_stt_click_before_push");
         menu_controller_push(&s_menu, MENU_SCREEN_STT);
         runtime_diag_log("ui_stt_click_after_push");
+    }
+}
+
+static void ai_button_event_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        runtime_diag_log("button_settings_ai_clicked");
+        menu_controller_push(&s_menu, MENU_SCREEN_AI);
     }
 }
 
@@ -310,6 +328,7 @@ static void render_body_unlocked(lv_obj_t *body)
             wifi_button_event_cb,
             brightness_button_event_cb,
             stt_button_event_cb,
+            ai_button_event_cb,
             tts_button_event_cb
         );
     } else if (screen_id == MENU_SCREEN_WIFI) {
@@ -332,6 +351,12 @@ static void render_body_unlocked(lv_obj_t *body)
             &s_state,
             &s_callbacks
         );
+    } else if (screen_id == MENU_SCREEN_AI) {
+        ai_screen_render(
+            body,
+            &s_state,
+            &s_callbacks
+        );
     } else if (screen_id == MENU_SCREEN_TTS) {
         tts_screen_render(
             body,
@@ -349,7 +374,7 @@ static void render_body_unlocked(lv_obj_t *body)
         );
     }
 
-    if (screen_id != MENU_SCREEN_STT && screen_id != MENU_SCREEN_TTS) {
+    if (screen_id != MENU_SCREEN_STT && screen_id != MENU_SCREEN_AI && screen_id != MENU_SCREEN_TTS) {
         append_body_scroll_spacer(body);
     }
 }
@@ -533,6 +558,7 @@ void ui_manager_update_wifi_status(
     } else if (
         current == MENU_SCREEN_BRIGHTNESS ||
         current == MENU_SCREEN_STT ||
+        current == MENU_SCREEN_AI ||
         current == MENU_SCREEN_TTS
     ) {
         should_render = false;
@@ -597,6 +623,57 @@ void ui_manager_update_stt_status(
             !speaker_test_active &&
             !recording_playback_active
         ) {
+            return;
+        }
+
+        render_body_only_locked();
+    }
+}
+
+
+void ui_manager_update_ai_status(
+    const char *status,
+    const char *result,
+    bool recording,
+    bool busy,
+    bool speaking
+)
+{
+    bool changed = false;
+
+    if (status != NULL && strcmp(s_state.ai_status, status) != 0) {
+        strncpy(s_state.ai_status, status, sizeof(s_state.ai_status) - 1);
+        s_state.ai_status[sizeof(s_state.ai_status) - 1] = '\0';
+        changed = true;
+    }
+
+    if (result != NULL && strcmp(s_state.ai_result, result) != 0) {
+        strncpy(s_state.ai_result, result, sizeof(s_state.ai_result) - 1);
+        s_state.ai_result[sizeof(s_state.ai_result) - 1] = '\0';
+        changed = true;
+    }
+
+    if (s_state.ai_recording != recording) {
+        s_state.ai_recording = recording;
+        changed = true;
+    }
+
+    if (s_state.ai_busy != busy) {
+        s_state.ai_busy = busy;
+        changed = true;
+    }
+
+    if (s_state.ai_speaking != speaking) {
+        s_state.ai_speaking = speaking;
+        changed = true;
+    }
+
+    if (!changed) {
+        return;
+    }
+
+    if (menu_controller_current(&s_menu) == MENU_SCREEN_AI) {
+        if (recording && !busy && !speaking) {
             return;
         }
 

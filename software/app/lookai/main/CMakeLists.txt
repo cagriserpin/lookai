@@ -6,6 +6,9 @@ idf_component_register(
 
         "system/runtime_diag.c"
 
+        "ai/ai_manager.c"
+        "ai/ai_api_client.c"
+
         "stt/stt_manager.c"
         "stt/stt_api_client.c"
 
@@ -42,12 +45,14 @@ idf_component_register(
         "ui/menus/settings/wifi/wifi_settings_screen.c"
         "ui/menus/settings/wifi/manage_networks_screen.c"
         "ui/menus/settings/brightness/brightness_screen.c"
+        "ui/menus/settings/ai/ai_screen.c"
         "ui/menus/settings/stt/stt_screen.c"
         "ui/menus/settings/tts/tts_screen.c"
     INCLUDE_DIRS
         "."
         "app"
         "system"
+        "ai"
         "stt"
         "tts"
         "audio"
@@ -61,9 +66,11 @@ idf_component_register(
         "ui/menus/settings"
         "ui/menus/settings/brightness"
         "ui/menus/settings/wifi"
+        "ui/menus/settings/ai"
         "ui/menus/settings/stt"
         "ui/menus/settings/tts"
     REQUIRES
+        esp_common
         esp_wifi
         esp_event
         esp_netif

@@ -28,6 +28,7 @@ void settings_screen_render(
     lv_event_cb_t wifi_button_cb,
     lv_event_cb_t brightness_button_cb,
     lv_event_cb_t stt_button_cb,
+    lv_event_cb_t ai_button_cb,
     lv_event_cb_t tts_button_cb
 )
 {
@@ -50,6 +51,12 @@ void settings_screen_render(
         .type = UI_SETTINGS_ITEM_ICON_TEXT,
         .text = "STT",
         .color = 0x22C55E,
+    };
+
+    const ui_settings_item_icon_t ai_icon = {
+        .type = UI_SETTINGS_ITEM_ICON_TEXT,
+        .text = "AI",
+        .color = 0x38BDF8,
     };
 
     const ui_settings_item_icon_t tts_icon = {
@@ -83,6 +90,16 @@ void settings_screen_render(
         &stt_icon,
         "Speech to Text",
         stt_button_cb,
+        NULL
+    );
+
+    create_settings_separator(body);
+
+    ui_settings_item_create(
+        body,
+        &ai_icon,
+        "AI Assistant",
+        ai_button_cb,
         NULL
     );
 

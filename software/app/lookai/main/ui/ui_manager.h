@@ -33,6 +33,8 @@ typedef struct {
     ui_manager_action_cb_t stt_release;           /**< Stop push-to-talk recording flow. */
     ui_manager_action_cb_t stt_test_speaker;      /**< Toggle the 440 Hz speaker test tone. */
     ui_manager_action_cb_t stt_play_recording;    /**< Play the last saved recording. */
+    ui_manager_action_cb_t ai_press;              /**< Start AI push-to-talk recording flow. */
+    ui_manager_action_cb_t ai_release;            /**< Stop AI push-to-talk recording flow. */
     ui_manager_action_cb_t tts_sample_1;          /**< Generate and play the first TTS sample. */
     ui_manager_action_cb_t tts_sample_2;          /**< Generate and play the second TTS sample. */
 } ui_manager_callbacks_t;
@@ -61,6 +63,11 @@ typedef struct {
     bool stt_processing;                                                   /**< True while fake/real STT processing is running. */
     bool stt_speaker_test_active;                                          /**< True while the speaker test tone is playing. */
     bool stt_recording_playback_active;                                    /**< True while the saved recording is playing. */
+    char ai_status[64];                                                    /**< AI assistant state label. */
+    char ai_result[512];                                                   /**< Latest AI assistant status/result text. */
+    bool ai_recording;                                                     /**< True while AI push-to-talk is pressed. */
+    bool ai_busy;                                                          /**< True while AI STT/prompt/TTS flow is active. */
+    bool ai_speaking;                                                      /**< True while AI response playback is active. */
     char tts_status[64];                                                   /**< Text-to-speech state label. */
     char tts_result[256];                                                  /**< Latest text-to-speech status/result text. */
     bool tts_busy;                                                         /**< True while TTS generation or playback is active. */
@@ -101,4 +108,12 @@ void ui_manager_update_tts_status(
     const char *status,
     const char *result,
     bool busy
+);
+
+void ui_manager_update_ai_status(
+    const char *status,
+    const char *result,
+    bool recording,
+    bool busy,
+    bool speaking
 );
