@@ -5,6 +5,8 @@
 
 #include "ui_button.h"
 
+#include "ui_theme.h"
+
 lv_obj_t *ui_button_create(
     lv_obj_t *parent,
     const char *text,
@@ -18,8 +20,13 @@ lv_obj_t *ui_button_create(
     lv_obj_t *btn = lv_button_create(parent);
 
     lv_obj_set_size(btn, width, height);
-    lv_obj_set_style_radius(btn, 18, 0);
+    lv_obj_set_style_radius(btn, height / 2, 0);
     lv_obj_set_style_bg_color(btn, lv_color_hex(color), 0);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(UI_COLOR_CARD_PRESSED), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(btn, lv_color_hex(UI_COLOR_BORDER_SOFT), 0);
+    lv_obj_set_style_border_width(btn, 1, 0);
+    lv_obj_set_style_shadow_width(btn, 0, 0);
     lv_obj_set_scrollbar_mode(btn, LV_SCROLLBAR_MODE_OFF);
     lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -37,6 +44,7 @@ lv_obj_t *ui_button_create(
      */
     lv_obj_set_width(label, width > 24 ? width - 24 : width);
     lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL);
+    lv_obj_set_style_text_color(label, lv_color_hex(UI_COLOR_TEXT), 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_center(label);
 

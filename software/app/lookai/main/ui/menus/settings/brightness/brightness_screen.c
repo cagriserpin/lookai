@@ -27,6 +27,8 @@ void brightness_screen_render(
 )
 {
     lv_obj_t *card = ui_card_create(body);
+    lv_obj_set_style_bg_color(card, lv_color_hex(UI_COLOR_CARD_ALT), 0);
+    lv_obj_set_style_border_color(card, lv_color_hex(UI_COLOR_BRIGHTNESS_ORANGE), 0);
 
     /*
      * Extra padding is applied horizontally only. The large slider knob needs
@@ -45,7 +47,7 @@ void brightness_screen_render(
     snprintf(value_text, sizeof(value_text), "%d%%", state->brightness_percent);
     lv_label_set_text(value_label, value_text);
     lv_obj_set_width(value_label, BRIGHTNESS_CARD_INNER_WIDTH);
-    lv_obj_set_style_text_color(value_label, lv_color_hex(UI_COLOR_TEXT), 0);
+    lv_obj_set_style_text_color(value_label, lv_color_hex(UI_COLOR_BRIGHTNESS_ORANGE), 0);
     lv_obj_set_style_text_align(value_label, LV_TEXT_ALIGN_CENTER, 0);
 
     lv_obj_t *slider = lv_slider_create(card);
@@ -56,7 +58,7 @@ void brightness_screen_render(
 
     lv_obj_set_style_radius(slider, 12, LV_PART_MAIN);
     lv_obj_set_style_radius(slider, 12, LV_PART_INDICATOR);
-    lv_obj_set_style_bg_color(slider, lv_color_hex(0x2A3448), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(slider, lv_color_hex(UI_COLOR_SECONDARY), LV_PART_MAIN);
     lv_obj_set_style_bg_color(slider, lv_color_hex(UI_COLOR_BRIGHTNESS_ORANGE), LV_PART_INDICATOR);
 
     /*

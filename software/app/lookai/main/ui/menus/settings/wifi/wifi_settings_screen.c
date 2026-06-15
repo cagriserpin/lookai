@@ -23,6 +23,8 @@ void wifi_settings_screen_render(
     (void)callbacks;
 
     lv_obj_t *status_card = ui_card_create(body);
+    lv_obj_set_style_bg_color(status_card, lv_color_hex(UI_COLOR_CARD_ALT), 0);
+    lv_obj_set_style_border_color(status_card, lv_color_hex(UI_COLOR_WIFI_BLUE), 0);
     ui_label_create(status_card, "Connection status", UI_COLOR_TEXT, UI_THEME_CARD_INNER_WIDTH);
 
     char status_line[96];
@@ -53,6 +55,8 @@ void wifi_settings_screen_render(
 
     if (state->portal_active) {
         lv_obj_t *portal_card = ui_card_create(body);
+        lv_obj_set_style_bg_color(portal_card, lv_color_hex(UI_COLOR_CARD_ALT), 0);
+        lv_obj_set_style_border_color(portal_card, lv_color_hex(UI_COLOR_SUCCESS), 0);
         ui_label_create(portal_card, "Setup portal active", UI_COLOR_SUCCESS_TEXT, UI_THEME_CARD_INNER_WIDTH);
         ui_label_create(portal_card, "Wi-Fi: LookAI-Setup", UI_COLOR_MUTED, UI_THEME_CARD_INNER_WIDTH);
         ui_label_create(portal_card, "Password: 12345678", UI_COLOR_MUTED, UI_THEME_CARD_INNER_WIDTH);

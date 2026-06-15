@@ -29,8 +29,8 @@
 
 static const char *TAG = "ui_manager";
 
-#ifndef CONFIG_LOOKAI_RUNTIME_DIAG_ENABLE
-#define CONFIG_LOOKAI_RUNTIME_DIAG_ENABLE 0
+#ifndef CONFIG_LOOKAI_UI_SCROLL_DIAG
+#define CONFIG_LOOKAI_UI_SCROLL_DIAG 0
 #endif
 
 static menu_controller_t s_menu;
@@ -157,9 +157,13 @@ static ui_scaffold_title_icon_t get_current_title_icon(void)
             return UI_SCAFFOLD_TITLE_ICON_BRIGHTNESS;
 
         case MENU_SCREEN_STT:
+            return UI_SCAFFOLD_TITLE_ICON_STT;
+
         case MENU_SCREEN_AI:
+            return UI_SCAFFOLD_TITLE_ICON_AI;
+
         case MENU_SCREEN_TTS:
-            return UI_SCAFFOLD_TITLE_ICON_NONE;
+            return UI_SCAFFOLD_TITLE_ICON_TTS;
 
         case MENU_SCREEN_SETTINGS:
         default:
@@ -437,7 +441,7 @@ static void body_scroll_diag_event_cb(lv_event_t *event)
 
 static void attach_body_diag(lv_obj_t *body)
 {
-#if CONFIG_LOOKAI_RUNTIME_DIAG_ENABLE
+#if CONFIG_LOOKAI_UI_SCROLL_DIAG
     if (body == NULL) {
         return;
     }
@@ -447,6 +451,7 @@ static void attach_body_diag(lv_obj_t *body)
     lv_obj_add_event_cb(body, body_scroll_diag_event_cb, LV_EVENT_SCROLL_END, NULL);
 #else
     (void)body;
+    (void)body_scroll_diag_event_cb;
 #endif
 }
 

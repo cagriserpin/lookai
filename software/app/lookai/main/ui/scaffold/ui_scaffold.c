@@ -187,6 +187,18 @@ static void create_title_icon(lv_obj_t *top, ui_scaffold_title_icon_t title_icon
             icon_font = UI_TITLE_CUSTOM_ICON_FONT;
             break;
 
+        case UI_SCAFFOLD_TITLE_ICON_STT:
+            icon_text = "STT";
+            break;
+
+        case UI_SCAFFOLD_TITLE_ICON_AI:
+            icon_text = "AI";
+            break;
+
+        case UI_SCAFFOLD_TITLE_ICON_TTS:
+            icon_text = "TTS";
+            break;
+
         case UI_SCAFFOLD_TITLE_ICON_NONE:
         default:
             return;
@@ -195,7 +207,7 @@ static void create_title_icon(lv_obj_t *top, ui_scaffold_title_icon_t title_icon
     lv_obj_t *icon = lv_label_create(top);
     lv_label_set_text(icon, icon_text);
     lv_obj_set_style_text_font(icon, icon_font, 0);
-    lv_obj_set_style_text_color(icon, lv_color_hex(UI_COLOR_TEXT), 0);
+    lv_obj_set_style_text_color(icon, lv_color_hex(UI_COLOR_PRIMARY_SOFT), 0);
 
     /*
      * Icon lives at the very top of the top slice. The title text keeps its
@@ -287,11 +299,16 @@ static void create_left_slice(lv_obj_t *screen, const ui_scaffold_config_t *conf
     }
 
     lv_obj_t *back_hitbox = lv_obj_create(left);
-    lv_obj_set_size(back_hitbox, 56, 56);
+    lv_obj_set_size(back_hitbox, 54, 54);
     lv_obj_center(back_hitbox);
-    lv_obj_set_style_bg_opa(back_hitbox, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(back_hitbox, 0, 0);
+    lv_obj_set_style_radius(back_hitbox, UI_THEME_PILL_RADIUS, 0);
+    lv_obj_set_style_bg_color(back_hitbox, lv_color_hex(UI_COLOR_CARD), 0);
+    lv_obj_set_style_bg_opa(back_hitbox, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(back_hitbox, lv_color_hex(UI_COLOR_CARD_PRESSED), LV_STATE_PRESSED);
+    lv_obj_set_style_border_color(back_hitbox, lv_color_hex(UI_COLOR_BORDER_SOFT), 0);
+    lv_obj_set_style_border_width(back_hitbox, 1, 0);
     lv_obj_set_style_pad_all(back_hitbox, 0, 0);
+    lv_obj_set_style_shadow_width(back_hitbox, 0, 0);
     lv_obj_clear_flag(back_hitbox, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(back_hitbox, LV_OBJ_FLAG_CLICKABLE);
 
@@ -303,6 +320,7 @@ static void create_left_slice(lv_obj_t *screen, const ui_scaffold_config_t *conf
     lv_label_set_text(icon, LV_SYMBOL_LEFT);
     lv_obj_set_style_text_font(icon, UI_BACK_ICON_FONT, 0);
     lv_obj_set_style_text_color(icon, lv_color_hex(UI_COLOR_TEXT), 0);
+    lv_obj_set_style_text_color(icon, lv_color_hex(UI_COLOR_PRIMARY_SOFT), LV_STATE_PRESSED);
     lv_obj_center(icon);
 }
 
@@ -345,6 +363,10 @@ static lv_obj_t *create_body(lv_obj_t *screen, bool show_bottom_slice)
     lv_obj_set_style_pad_gap(body, 12, 0);
     lv_obj_set_scroll_dir(body, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_style_width(body, 4, LV_PART_SCROLLBAR);
+    lv_obj_set_style_bg_color(body, lv_color_hex(UI_COLOR_PRIMARY), LV_PART_SCROLLBAR);
+    lv_obj_set_style_bg_opa(body, LV_OPA_50, LV_PART_SCROLLBAR);
+    lv_obj_set_style_radius(body, UI_THEME_PILL_RADIUS, LV_PART_SCROLLBAR);
     lv_obj_clear_flag(body, LV_OBJ_FLAG_SCROLL_ELASTIC);
     lv_obj_clear_flag(body, LV_OBJ_FLAG_SCROLL_MOMENTUM);
     lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);

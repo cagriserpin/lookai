@@ -17,6 +17,9 @@ typedef enum {
     UI_SCAFFOLD_TITLE_ICON_SETTINGS,       /**< Settings title icon. */
     UI_SCAFFOLD_TITLE_ICON_WIFI,           /**< Wi-Fi title icon. */
     UI_SCAFFOLD_TITLE_ICON_BRIGHTNESS,     /**< Brightness title icon. */
+    UI_SCAFFOLD_TITLE_ICON_STT,            /**< Speech-to-text title icon. */
+    UI_SCAFFOLD_TITLE_ICON_AI,             /**< AI assistant title icon. */
+    UI_SCAFFOLD_TITLE_ICON_TTS,            /**< Text-to-speech title icon. */
 } ui_scaffold_title_icon_t;
 
 /**

@@ -49,12 +49,12 @@
  *
  * This keeps content away from the vertical scrollbar.
  */
-#define UI_THEME_BODY_RIGHT_SCROLL_PADDING 18
+#define UI_THEME_BODY_RIGHT_SCROLL_PADDING 14
 
 /**
  * @brief Width of the top-slice title label.
  */
-#define UI_THEME_TITLE_WIDTH 248
+#define UI_THEME_TITLE_WIDTH 250
 
 /**
  * @brief Card width inside the central UI body.
@@ -79,23 +79,41 @@
 /**
  * @brief Settings row height.
  */
-#define UI_THEME_SETTINGS_ITEM_HEIGHT 76
+#define UI_THEME_SETTINGS_ITEM_HEIGHT 72
+
+#define UI_THEME_CARD_RADIUS 22
+#define UI_THEME_PILL_RADIUS 999
+#define UI_THEME_COMPACT_GAP 10
+#define UI_THEME_SECTION_LABEL_HEIGHT 26
 
 /**
  * @brief Common UI colors.
+ *
+ * The palette is tuned for the 1.75" round AMOLED panel: deep background,
+ * slightly lifted surfaces, thin cool borders, and strong but sparse accents.
  */
 enum {
-    UI_COLOR_BG = 0x05070C,
-    UI_COLOR_CARD = 0x141925,
-    UI_COLOR_BORDER = 0x2A3448,
-    UI_COLOR_TEXT = 0xFFFFFF,
-    UI_COLOR_MUTED = 0xAAB6C8,
-    UI_COLOR_DIM = 0x7F8DA3,
-    UI_COLOR_PRIMARY = 0x2D7EE8,
-    UI_COLOR_SECONDARY = 0x222B3C,
-    UI_COLOR_SUCCESS = 0x1F9D55,
-    UI_COLOR_SUCCESS_TEXT = 0x37D67A,
-    UI_COLOR_DANGER = 0xC9344A,
-    UI_COLOR_WIFI_BLUE = 0x2D7EE8,
+    UI_COLOR_BG = 0x030610,
+    UI_COLOR_BG_RAISED = 0x080D18,
+    UI_COLOR_CARD = 0x101827,
+    UI_COLOR_CARD_ALT = 0x151F31,
+    UI_COLOR_CARD_PRESSED = 0x1B2940,
+    UI_COLOR_BORDER = 0x263448,
+    UI_COLOR_BORDER_SOFT = 0x1A2535,
+    UI_COLOR_TEXT = 0xF8FAFC,
+    UI_COLOR_MUTED = 0xA8B3C7,
+    UI_COLOR_DIM = 0x6F7E96,
+    UI_COLOR_PRIMARY = 0x3B82F6,
+    UI_COLOR_PRIMARY_SOFT = 0x93C5FD,
+    UI_COLOR_SECONDARY = 0x1D2738,
+    UI_COLOR_SUCCESS = 0x22C55E,
+    UI_COLOR_SUCCESS_DARK = 0x14532D,
+    UI_COLOR_SUCCESS_TEXT = 0x86EFAC,
+    UI_COLOR_DANGER = 0xF43F5E,
+    UI_COLOR_WARNING = 0xF59E0B,
+    UI_COLOR_WIFI_BLUE = 0x38BDF8,
     UI_COLOR_BRIGHTNESS_ORANGE = 0xF59E0B,
+    UI_COLOR_AI_CYAN = 0x38BDF8,
+    UI_COLOR_STT_GREEN = 0x22C55E,
+    UI_COLOR_TTS_PURPLE = 0xA855F7,
 };

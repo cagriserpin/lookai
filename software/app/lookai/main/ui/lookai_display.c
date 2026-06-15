@@ -27,7 +27,7 @@
  * HTTPS connections. Settings-menu render cost is now attacked with PSRAM-backed
  * item snapshot caching instead of reserving a large internal display buffer.
  */
-#define LOOKAI_DISPLAY_BUFFER_LINES             64
+#define LOOKAI_DISPLAY_BUFFER_LINES             48
 #define LOOKAI_DISPLAY_TRANSFER_GUARD_LINES      2
 #define LOOKAI_DISPLAY_MAX_TRANSFER_LINES       (LOOKAI_DISPLAY_BUFFER_LINES + LOOKAI_DISPLAY_TRANSFER_GUARD_LINES)
 #define LOOKAI_DISPLAY_USE_PSRAM_BUFFER         false

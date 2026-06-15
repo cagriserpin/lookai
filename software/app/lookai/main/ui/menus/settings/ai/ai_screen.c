@@ -5,6 +5,8 @@
 
 #include "ai_screen.h"
 
+#include <string.h>
+
 #include "runtime_diag.h"
 #include "ui_theme.h"
 
@@ -48,12 +50,30 @@ static void set_button_enabled(lv_obj_t *button, bool enabled)
         return;
     }
 
+    bool currently_enabled = lv_obj_has_flag(button, LV_OBJ_FLAG_CLICKABLE);
+    if (currently_enabled == enabled) {
+        return;
+    }
+
     if (enabled) {
         lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_set_style_opa(button, LV_OPA_COVER, 0);
     } else {
         lv_obj_clear_flag(button, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_set_style_opa(button, LV_OPA_40, 0);
+    }
+}
+
+static void set_label_text_if_changed(lv_obj_t *label, const char *text)
+{
+    if (label == NULL) {
+        return;
+    }
+
+    const char *safe_text = text != NULL ? text : "";
+    const char *old_text = lv_label_get_text(label);
+    if (old_text == NULL || strcmp(old_text, safe_text) != 0) {
+        lv_label_set_text(label, safe_text);
     }
 }
 
@@ -133,7 +153,7 @@ static lv_obj_t *create_text_label(
     lv_obj_set_width(label, AI_TEXT_WIDTH);
     lv_obj_set_style_text_color(label, lv_color_hex(color), 0);
     lv_obj_set_style_text_align(label, align, 0);
-    lv_obj_set_style_text_line_space(label, 2, 0);
+    lv_obj_set_style_text_line_space(label, 4, 0);
 
     return label;
 }
@@ -150,18 +170,23 @@ static lv_obj_t *create_text_panel(
     lv_obj_t *panel = lv_obj_create(parent);
 
     lv_obj_set_size(panel, AI_TEXT_PANEL_WIDTH, AI_TEXT_PANEL_HEIGHT);
-    lv_obj_set_style_bg_color(panel, lv_color_hex(UI_COLOR_CARD), 0);
+    lv_obj_set_style_bg_color(panel, lv_color_hex(UI_COLOR_CARD_ALT), 0);
     lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(panel, lv_color_hex(UI_COLOR_BORDER), 0);
+    lv_obj_set_style_border_color(panel, lv_color_hex(UI_COLOR_BORDER_SOFT), 0);
+    lv_obj_set_style_border_color(panel, lv_color_hex(AI_COLOR_CYAN), LV_STATE_FOCUSED);
     lv_obj_set_style_border_width(panel, 1, 0);
-    lv_obj_set_style_radius(panel, 18, 0);
-    lv_obj_set_style_pad_left(panel, 14, 0);
-    lv_obj_set_style_pad_right(panel, 14, 0);
-    lv_obj_set_style_pad_top(panel, 12, 0);
-    lv_obj_set_style_pad_bottom(panel, 12, 0);
-    lv_obj_set_style_pad_gap(panel, 7, 0);
+    lv_obj_set_style_radius(panel, UI_THEME_CARD_RADIUS, 0);
+    lv_obj_set_style_pad_left(panel, 16, 0);
+    lv_obj_set_style_pad_right(panel, 16, 0);
+    lv_obj_set_style_pad_top(panel, 14, 0);
+    lv_obj_set_style_pad_bottom(panel, 14, 0);
+    lv_obj_set_style_pad_gap(panel, 8, 0);
     lv_obj_set_scroll_dir(panel, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(panel, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_style_width(panel, 3, LV_PART_SCROLLBAR);
+    lv_obj_set_style_bg_color(panel, lv_color_hex(AI_COLOR_CYAN), LV_PART_SCROLLBAR);
+    lv_obj_set_style_bg_opa(panel, LV_OPA_50, LV_PART_SCROLLBAR);
+    lv_obj_set_style_radius(panel, UI_THEME_PILL_RADIUS, LV_PART_SCROLLBAR);
     lv_obj_add_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(panel, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(
@@ -227,11 +252,11 @@ static void ai_screen_apply_dynamic_state(
     bool talk_enabled = !busy || recording;
 
     if (status_label != NULL) {
-        lv_label_set_text(status_label, status);
+        set_label_text_if_changed(status_label, status);
     }
 
     if (message_label != NULL) {
-        lv_label_set_text(message_label, message);
+        set_label_text_if_changed(message_label, message);
         lv_obj_set_style_text_color(message_label, lv_color_hex(message_color), 0);
     }
 
@@ -341,9 +366,10 @@ void ai_screen_render(
     lv_obj_set_size(talk_button, AI_TALK_BUTTON_SIZE, AI_TALK_BUTTON_SIZE);
     lv_obj_set_style_radius(talk_button, AI_TALK_BUTTON_SIZE / 2, 0);
     lv_obj_set_style_bg_color(talk_button, lv_color_hex(AI_COLOR_CYAN), 0);
+    lv_obj_set_style_bg_color(talk_button, lv_color_hex(AI_COLOR_CYAN_DARK), LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(talk_button, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(talk_button, lv_color_hex(AI_COLOR_CYAN_SOFT), 0);
-    lv_obj_set_style_border_width(talk_button, 3, 0);
+    lv_obj_set_style_border_width(talk_button, 4, 0);
     lv_obj_set_style_shadow_width(talk_button, 0, 0);
     lv_obj_set_style_pad_all(talk_button, 8, 0);
     lv_obj_set_scrollbar_mode(talk_button, LV_SCROLLBAR_MODE_OFF);

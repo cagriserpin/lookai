@@ -12,6 +12,10 @@
 #define UI_SETTINGS_ITEM_ICON_FONT (&lv_font_montserrat_18)
 #endif
 
+#ifndef UI_SETTINGS_ITEM_TITLE_FONT
+#define UI_SETTINGS_ITEM_TITLE_FONT (&lv_font_montserrat_18)
+#endif
+
 /**
  * @brief Create an LVGL built-in symbol/text icon.
  *
@@ -54,20 +58,18 @@ lv_obj_t *ui_settings_item_create(
 {
     uint32_t icon_color = icon_config != NULL ? icon_config->color : UI_COLOR_SECONDARY;
 
-    /*
-     * Keep the visual row exactly the same, but avoid a nested flex layout and
-     * transparent-row blending on every scroll frame. The central body is a
-     * uniform dark color, so an opaque row with the same color is visually
-     * identical while being cheaper for LVGL's software renderer.
-     */
     lv_obj_t *item = lv_obj_create(parent);
 
     lv_obj_set_size(item, UI_THEME_BUTTON_WIDTH, UI_THEME_SETTINGS_ITEM_HEIGHT);
-    lv_obj_set_style_bg_color(item, lv_color_hex(UI_COLOR_BG), 0);
+    lv_obj_set_style_bg_color(item, lv_color_hex(UI_COLOR_CARD), 0);
+    lv_obj_set_style_bg_color(item, lv_color_hex(UI_COLOR_CARD_PRESSED), LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(item, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(item, 0, 0);
-    lv_obj_set_style_radius(item, 0, 0);
+    lv_obj_set_style_border_color(item, lv_color_hex(UI_COLOR_BORDER_SOFT), 0);
+    lv_obj_set_style_border_color(item, lv_color_hex(icon_color), LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(item, 1, 0);
+    lv_obj_set_style_radius(item, 22, 0);
     lv_obj_set_style_pad_all(item, 0, 0);
+    lv_obj_set_style_shadow_width(item, 0, 0);
     lv_obj_set_scrollbar_mode(item, LV_SCROLLBAR_MODE_OFF);
     lv_obj_clear_flag(item, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(item, LV_OBJ_FLAG_CLICKABLE);
@@ -76,12 +78,23 @@ lv_obj_t *ui_settings_item_create(
         lv_obj_add_event_cb(item, cb, LV_EVENT_CLICKED, user_data);
     }
 
+    lv_obj_t *accent = lv_obj_create(item);
+    lv_obj_set_size(accent, 4, 34);
+    lv_obj_align(accent, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_style_radius(accent, UI_THEME_PILL_RADIUS, 0);
+    lv_obj_set_style_bg_color(accent, lv_color_hex(icon_color), 0);
+    lv_obj_set_style_bg_opa(accent, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(accent, 0, 0);
+    lv_obj_set_style_pad_all(accent, 0, 0);
+    lv_obj_clear_flag(accent, LV_OBJ_FLAG_SCROLLABLE);
+
     lv_obj_t *icon_circle = lv_obj_create(item);
-    lv_obj_set_size(icon_circle, 52, 52);
-    lv_obj_align(icon_circle, LV_ALIGN_LEFT_MID, 4, 0);
-    lv_obj_set_style_radius(icon_circle, 26, 0);
+    lv_obj_set_size(icon_circle, 48, 48);
+    lv_obj_align(icon_circle, LV_ALIGN_LEFT_MID, 14, 0);
+    lv_obj_set_style_radius(icon_circle, 24, 0);
     lv_obj_set_style_bg_color(icon_circle, lv_color_hex(icon_color), 0);
     lv_obj_set_style_bg_opa(icon_circle, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(icon_circle, lv_color_hex(UI_COLOR_TEXT), 0);
     lv_obj_set_style_border_width(icon_circle, 0, 0);
     lv_obj_set_style_pad_all(icon_circle, 0, 0);
     lv_obj_set_scrollbar_mode(icon_circle, LV_SCROLLBAR_MODE_OFF);
@@ -97,11 +110,18 @@ lv_obj_t *ui_settings_item_create(
 
     lv_obj_t *label = lv_label_create(item);
     lv_label_set_text_static(label, title != NULL ? title : "");
-    lv_obj_set_width(label, UI_THEME_BUTTON_WIDTH - 92);
+    lv_obj_set_width(label, UI_THEME_BUTTON_WIDTH - 112);
     lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_font(label, UI_SETTINGS_ITEM_TITLE_FONT, 0);
     lv_obj_set_style_text_color(label, lv_color_hex(UI_COLOR_TEXT), 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_align(label, LV_ALIGN_LEFT_MID, 70, 0);
+    lv_obj_align(label, LV_ALIGN_LEFT_MID, 74, -1);
+
+    lv_obj_t *chevron = lv_label_create(item);
+    lv_label_set_text_static(chevron, LV_SYMBOL_RIGHT);
+    lv_obj_set_style_text_font(chevron, UI_SETTINGS_ITEM_ICON_FONT, 0);
+    lv_obj_set_style_text_color(chevron, lv_color_hex(UI_COLOR_DIM), 0);
+    lv_obj_align(chevron, LV_ALIGN_RIGHT_MID, -16, 0);
 
     return item;
 }

@@ -6,12 +6,13 @@
 #include "tts_screen.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #include "ui_card.h"
 #include "ui_theme.h"
 #include "runtime_diag.h"
 
-#define TTS_COLOR_PURPLE 0xA855F7
+#define TTS_COLOR_PURPLE UI_COLOR_TTS_PURPLE
 #define TTS_COLOR_PURPLE_DARK 0x6D28D9
 #define TTS_CONTAINER_WIDTH UI_THEME_CARD_WIDTH
 #define TTS_CONTAINER_HEIGHT 330
@@ -39,6 +40,11 @@ static void style_plain_container(lv_obj_t *obj)
 static void set_card_enabled(lv_obj_t *card, bool enabled)
 {
     if (card == NULL) {
+        return;
+    }
+
+    bool currently_enabled = lv_obj_has_flag(card, LV_OBJ_FLAG_CLICKABLE);
+    if (currently_enabled == enabled) {
         return;
     }
 
@@ -121,7 +127,10 @@ static void update_status_label(lv_obj_t *label, const char *status, const char 
         result != NULL && result[0] != '\0' ? result : "Select a sample text."
     );
 
-    lv_label_set_text(label, text);
+    const char *old_text = lv_label_get_text(label);
+    if (old_text == NULL || strcmp(old_text, text) != 0) {
+        lv_label_set_text(label, text);
+    }
 }
 
 static lv_obj_t *create_sample_card(
@@ -134,8 +143,11 @@ static lv_obj_t *create_sample_card(
     lv_obj_t *card = ui_card_create(parent);
 
     lv_obj_set_height(card, TTS_CARD_HEIGHT);
-    lv_obj_set_style_border_color(card, lv_color_hex(TTS_COLOR_PURPLE), 0);
-    lv_obj_set_style_border_width(card, 2, 0);
+    lv_obj_set_style_bg_color(card, lv_color_hex(UI_COLOR_CARD), 0);
+    lv_obj_set_style_bg_color(card, lv_color_hex(UI_COLOR_CARD_PRESSED), LV_STATE_PRESSED);
+    lv_obj_set_style_border_color(card, lv_color_hex(UI_COLOR_BORDER_SOFT), 0);
+    lv_obj_set_style_border_color(card, lv_color_hex(TTS_COLOR_PURPLE), LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(card, 1, 0);
     lv_obj_set_style_shadow_width(card, 0, 0);
     lv_obj_set_flex_align(
         card,

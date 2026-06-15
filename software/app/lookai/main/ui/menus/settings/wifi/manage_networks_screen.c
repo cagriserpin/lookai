@@ -18,6 +18,12 @@ static void render_network_card(
 )
 {
     lv_obj_t *card = ui_card_create(body);
+    lv_obj_set_style_bg_color(card, lv_color_hex(UI_COLOR_CARD_ALT), 0);
+    lv_obj_set_style_border_color(
+        card,
+        lv_color_hex(item->connected ? UI_COLOR_SUCCESS : UI_COLOR_BORDER_SOFT),
+        0
+    );
 
     lv_obj_t *row = lv_obj_create(card);
     lv_obj_set_width(row, UI_THEME_CARD_INNER_WIDTH);

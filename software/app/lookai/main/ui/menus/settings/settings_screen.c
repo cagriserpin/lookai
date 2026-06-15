@@ -5,20 +5,54 @@
 
 #include "settings_screen.h"
 
+#include "ui_card.h"
 #include "ui_settings_item.h"
 #include "ui_theme.h"
 
-static void create_settings_separator(lv_obj_t *body)
-{
-    lv_obj_t *separator = lv_obj_create(body);
+#ifndef SETTINGS_HERO_FONT
+#define SETTINGS_HERO_FONT (&lv_font_montserrat_18)
+#endif
 
-    lv_obj_set_size(separator, UI_THEME_BUTTON_WIDTH - 16, 1);
-    lv_obj_set_style_bg_color(separator, lv_color_hex(UI_COLOR_BORDER), 0);
-    lv_obj_set_style_bg_opa(separator, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(separator, 0, 0);
-    lv_obj_set_style_pad_all(separator, 0, 0);
-    lv_obj_clear_flag(separator, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_clear_flag(separator, LV_OBJ_FLAG_CLICKABLE);
+static void create_section_label(lv_obj_t *body, const char *text)
+{
+    lv_obj_t *label = lv_label_create(body);
+
+    lv_label_set_text_static(label, text != NULL ? text : "");
+    lv_obj_set_width(label, UI_THEME_BUTTON_WIDTH - 6);
+    lv_obj_set_style_text_color(label, lv_color_hex(UI_COLOR_DIM), 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
+    lv_obj_set_style_pad_top(label, 2, 0);
+    lv_obj_set_style_pad_left(label, 4, 0);
+}
+
+static void create_hero_card(lv_obj_t *body)
+{
+    lv_obj_t *hero = ui_card_create(body);
+
+    lv_obj_set_style_bg_color(hero, lv_color_hex(UI_COLOR_CARD_ALT), 0);
+    lv_obj_set_style_border_color(hero, lv_color_hex(UI_COLOR_BORDER), 0);
+    lv_obj_set_style_pad_all(hero, 14, 0);
+    lv_obj_set_style_pad_gap(hero, 6, 0);
+
+    lv_obj_t *eyebrow = lv_label_create(hero);
+    lv_label_set_text_static(eyebrow, "LOOKAI");
+    lv_obj_set_width(eyebrow, UI_THEME_CARD_INNER_WIDTH);
+    lv_obj_set_style_text_color(eyebrow, lv_color_hex(UI_COLOR_PRIMARY_SOFT), 0);
+    lv_obj_set_style_text_align(eyebrow, LV_TEXT_ALIGN_CENTER, 0);
+
+    lv_obj_t *title = lv_label_create(hero);
+    lv_label_set_text_static(title, "Control Center");
+    lv_obj_set_width(title, UI_THEME_CARD_INNER_WIDTH);
+    lv_obj_set_style_text_font(title, SETTINGS_HERO_FONT, 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(UI_COLOR_TEXT), 0);
+    lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
+
+    lv_obj_t *subtitle = lv_label_create(hero);
+    lv_label_set_text_static(subtitle, "Voice, network and display settings");
+    lv_label_set_long_mode(subtitle, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(subtitle, UI_THEME_CARD_INNER_WIDTH);
+    lv_obj_set_style_text_color(subtitle, lv_color_hex(UI_COLOR_MUTED), 0);
+    lv_obj_set_style_text_align(subtitle, LV_TEXT_ALIGN_CENTER, 0);
 }
 
 void settings_screen_render(
@@ -50,20 +84,23 @@ void settings_screen_render(
     const ui_settings_item_icon_t stt_icon = {
         .type = UI_SETTINGS_ITEM_ICON_TEXT,
         .text = "STT",
-        .color = 0x22C55E,
+        .color = UI_COLOR_STT_GREEN,
     };
 
     const ui_settings_item_icon_t ai_icon = {
         .type = UI_SETTINGS_ITEM_ICON_TEXT,
         .text = "AI",
-        .color = 0x38BDF8,
+        .color = UI_COLOR_AI_CYAN,
     };
 
     const ui_settings_item_icon_t tts_icon = {
         .type = UI_SETTINGS_ITEM_ICON_TEXT,
         .text = "TTS",
-        .color = 0xA855F7,
+        .color = UI_COLOR_TTS_PURPLE,
     };
+
+    create_hero_card(body);
+    create_section_label(body, "Device");
 
     ui_settings_item_create(
         body,
@@ -73,8 +110,6 @@ void settings_screen_render(
         NULL
     );
 
-    create_settings_separator(body);
-
     ui_settings_item_create(
         body,
         &brightness_icon,
@@ -83,7 +118,7 @@ void settings_screen_render(
         NULL
     );
 
-    create_settings_separator(body);
+    create_section_label(body, "Voice assistant");
 
     ui_settings_item_create(
         body,
@@ -93,8 +128,6 @@ void settings_screen_render(
         NULL
     );
 
-    create_settings_separator(body);
-
     ui_settings_item_create(
         body,
         &ai_icon,
@@ -102,8 +135,6 @@ void settings_screen_render(
         ai_button_cb,
         NULL
     );
-
-    create_settings_separator(body);
 
     ui_settings_item_create(
         body,
