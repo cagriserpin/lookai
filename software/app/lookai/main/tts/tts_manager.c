@@ -25,8 +25,8 @@
 static const char *TAG = "tts_manager";
 
 #define TTS_EVENT_QUEUE_LEN 4
-#define TTS_MANAGER_TASK_STACK_SIZE 8192
-#define TTS_GENERATE_TASK_STACK_SIZE 12288
+#define TTS_MANAGER_TASK_STACK_SIZE 5120
+#define TTS_GENERATE_TASK_STACK_SIZE 8192
 #define TTS_GENERATE_TASK_PRIORITY 4
 #define TTS_GENERATE_START_DELAY_MS 100
 #define TTS_POST_GENERATE_DELAY_MS 100
@@ -348,7 +348,7 @@ static void handle_speak_request(const char *text)
         (long long)timing_since_ms(s_tts_flow_start_ms)
     );
 
-    BaseType_t ok = xTaskCreate(
+    BaseType_t task_ok = xTaskCreate(
         generate_task,
         "tts_generate",
         TTS_GENERATE_TASK_STACK_SIZE,
@@ -361,10 +361,10 @@ static void handle_speak_request(const char *text)
         TAG,
         "TIMING TTS after_task_create total_ms=%lld result=%s",
         (long long)timing_since_ms(s_tts_flow_start_ms),
-        ok == pdPASS ? "pdPASS" : "pdFAIL"
+        task_ok == pdPASS ? "pdPASS" : "pdFAIL"
     );
 
-    if (ok != pdPASS) {
+    if (task_ok != pdPASS) {
         s_generate_task_handle = NULL;
         s_state = TTS_MANAGER_STATE_ERROR;
         set_error_message("Could not start TTS task.");
@@ -420,7 +420,7 @@ esp_err_t tts_manager_start(void)
         return ESP_ERR_NO_MEM;
     }
 
-    BaseType_t ok = xTaskCreate(
+    BaseType_t task_ok = xTaskCreate(
         tts_task,
         "tts_task",
         TTS_MANAGER_TASK_STACK_SIZE,
@@ -429,7 +429,7 @@ esp_err_t tts_manager_start(void)
         &s_tts_task_handle
     );
 
-    if (ok != pdPASS) {
+    if (task_ok != pdPASS) {
         ESP_LOGE(TAG, "Failed to create TTS task");
         vQueueDelete(s_tts_event_queue);
         s_tts_event_queue = NULL;

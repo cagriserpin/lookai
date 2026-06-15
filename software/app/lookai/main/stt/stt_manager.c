@@ -27,8 +27,8 @@
 static const char *TAG = "stt_manager";
 
 #define STT_EVENT_QUEUE_LEN 8
-#define STT_TASK_STACK_SIZE 6144
-#define STT_TRANSCRIBE_TASK_STACK_SIZE 12288
+#define STT_TASK_STACK_SIZE 5120
+#define STT_TRANSCRIBE_TASK_STACK_SIZE 8192
 #define STT_TRANSCRIBE_TASK_PRIORITY 4
 #define STT_TRANSCRIBE_START_DELAY_MS 100
 #define STT_TRANSCRIPT_BUFFER_SIZE 256
@@ -460,7 +460,7 @@ static void start_transcription_for_path(const char *path)
     vTaskDelay(pdMS_TO_TICKS(STT_TRANSCRIBE_START_DELAY_MS));
 
     runtime_diag_log("stt_before_transcribe_task_create");
-    BaseType_t ok = xTaskCreate(
+    BaseType_t task_ok = xTaskCreate(
         transcribe_task,
         "stt_transcribe",
         STT_TRANSCRIBE_TASK_STACK_SIZE,
@@ -471,7 +471,7 @@ static void start_transcription_for_path(const char *path)
 
     runtime_diag_log("stt_after_transcribe_task_create");
 
-    if (ok != pdPASS) {
+    if (task_ok != pdPASS) {
         s_transcribe_task_handle = NULL;
         ESP_LOGE(TAG, "Failed to create STT transcription task");
         set_error_message("STT error", "Could not start transcription task.");
@@ -762,7 +762,7 @@ esp_err_t stt_manager_start(void)
         return ESP_ERR_NO_MEM;
     }
 
-    BaseType_t ok = xTaskCreate(
+    BaseType_t task_ok = xTaskCreate(
         stt_task,
         "stt_task",
         STT_TASK_STACK_SIZE,
@@ -771,7 +771,7 @@ esp_err_t stt_manager_start(void)
         &s_stt_task_handle
     );
 
-    if (ok != pdPASS) {
+    if (task_ok != pdPASS) {
         ESP_LOGE(TAG, "Failed to create STT task");
         vQueueDelete(s_stt_event_queue);
         s_stt_event_queue = NULL;

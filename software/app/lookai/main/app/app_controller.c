@@ -11,6 +11,7 @@
 #include "esp_check.h"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "runtime_diag.h"
 
 #include "stt_manager.h"
 #include "tts_manager.h"
@@ -39,6 +40,11 @@ esp_err_t app_controller_start(void)
     ESP_LOGI(TAG, "Starting application");
 
     configure_log_levels();
+
+    esp_err_t diag_err = runtime_diag_start_task_stack_report();
+    if (diag_err != ESP_OK) {
+        ESP_LOGW(TAG, "Task stack report not started: %s", esp_err_to_name(diag_err));
+    }
 
     ESP_RETURN_ON_ERROR(ui_manager_init(), TAG, "Failed to initialize UI");
     ESP_RETURN_ON_ERROR(wifi_storage_init(), TAG, "Failed to initialize Wi-Fi storage");

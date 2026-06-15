@@ -145,4 +145,61 @@ menu "LookAI"
 
     endchoice
 
+
+endmenu
+
+menu "LookAI diagnostics"
+
+    config LOOKAI_RUNTIME_DIAG_STACK_REPORT
+        bool "Log FreeRTOS task stack report"
+        default y
+        select FREERTOS_USE_TRACE_FACILITY
+        help
+            Create a low-priority diagnostics task that logs every live
+            FreeRTOS task's stack high-water mark periodically.
+
+    config LOOKAI_RUNTIME_DIAG_STACK_REPORT_INTERVAL_MS
+        int "FreeRTOS task stack report interval (ms)"
+        default 1000
+        range 250 60000
+        depends on LOOKAI_RUNTIME_DIAG_STACK_REPORT
+        help
+            Period between full task stack reports. 1000 ms gives a 1-second
+            report cadence while debugging RAM/stack pressure.
+
+    config LOOKAI_RUNTIME_DIAG_STACK_REPORT_MAX_TASKS
+        int "FreeRTOS task stack report max tasks"
+        default 48
+        range 8 128
+        depends on LOOKAI_RUNTIME_DIAG_STACK_REPORT
+        help
+            Maximum number of tasks captured in one report. Increase this if
+            the log says task_stack_report_truncated.
+
+    config LOOKAI_RUNTIME_DIAG_STACK_REPORT_TASK_STACK_BYTES
+        int "FreeRTOS task stack report task stack size (bytes)"
+        default 4096
+        range 2048 8192
+        depends on LOOKAI_RUNTIME_DIAG_STACK_REPORT
+        help
+            Stack allocated for the diagnostics task itself.
+
+    config LOOKAI_RUNTIME_DIAG_STACK_REPORT_PRIORITY
+        int "FreeRTOS task stack report task priority"
+        default 1
+        range 0 5
+        depends on LOOKAI_RUNTIME_DIAG_STACK_REPORT
+        help
+            Diagnostics task priority. Keep this low to avoid affecting UI,
+            audio, Wi-Fi, STT, and TTS tasks.
+
+    config LOOKAI_RUNTIME_DIAG_STACK_LOW_WARN_BYTES
+        int "FreeRTOS low stack warning threshold (bytes)"
+        default 1024
+        range 128 8192
+        depends on LOOKAI_RUNTIME_DIAG_STACK_REPORT
+        help
+            Task stack high-water marks at or below this threshold are logged
+            as warnings and marked LOW.
+
 endmenu

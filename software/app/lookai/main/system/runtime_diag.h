@@ -7,6 +7,8 @@
 
 #include <stdint.h>
 
+#include "esp_err.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -15,6 +17,18 @@ extern "C" {
  * @brief Return a monotonic timestamp in microseconds.
  */
 int64_t runtime_diag_now_us(void);
+
+
+/**
+ * @brief Start the optional periodic FreeRTOS task stack high-water-mark report.
+ *
+ * When enabled from menuconfig, this creates a small diagnostics task that logs
+ * all live FreeRTOS tasks every configured interval. It is safe to call more
+ * than once.
+ *
+ * @return ESP_OK if started or disabled, otherwise an ESP-IDF error code.
+ */
+esp_err_t runtime_diag_start_task_stack_report(void);
 
 /**
  * @brief Log internal, DMA-capable, PSRAM heap and current task stack headroom.

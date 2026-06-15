@@ -37,7 +37,7 @@ static const char *TAG = "audio_recorder";
 #else
 #error "No LookAI STT audio format selected."
 #endif
-#define AUDIO_RECORDER_TASK_STACK_SIZE 4096
+#define AUDIO_RECORDER_TASK_STACK_SIZE 5120
 #define AUDIO_RECORDER_TASK_PRIORITY 5
 #define AUDIO_RECORDER_READ_BUFFER_SIZE 1024
 #define AUDIO_RECORDER_STOP_TIMEOUT_MS 3000
