@@ -18,6 +18,15 @@
 #define TTS_STATUS_WIDTH (UI_THEME_CARD_WIDTH - 34)
 #define TTS_CARD_HEIGHT 76
 
+typedef struct {
+    lv_obj_t *body;
+    lv_obj_t *status_label;
+    lv_obj_t *sample_1;
+    lv_obj_t *sample_2;
+} tts_screen_view_t;
+
+static tts_screen_view_t s_view = {0};
+
 static void style_plain_container(lv_obj_t *obj)
 {
     lv_obj_set_style_bg_opa(obj, LV_OPA_TRANSP, 0);
@@ -97,6 +106,24 @@ static lv_obj_t *create_status_label(lv_obj_t *parent, const char *status, const
     return label;
 }
 
+static void update_status_label(lv_obj_t *label, const char *status, const char *result)
+{
+    if (label == NULL) {
+        return;
+    }
+
+    char text[320];
+    snprintf(
+        text,
+        sizeof(text),
+        "%s\n%s",
+        status != NULL && status[0] != '\0' ? status : "Ready",
+        result != NULL && result[0] != '\0' ? result : "Select a sample text."
+    );
+
+    lv_label_set_text(label, text);
+}
+
 static lv_obj_t *create_sample_card(
     lv_obj_t *parent,
     const char *text,
@@ -109,10 +136,7 @@ static lv_obj_t *create_sample_card(
     lv_obj_set_height(card, TTS_CARD_HEIGHT);
     lv_obj_set_style_border_color(card, lv_color_hex(TTS_COLOR_PURPLE), 0);
     lv_obj_set_style_border_width(card, 2, 0);
-    lv_obj_set_style_shadow_width(card, 10, 0);
-    lv_obj_set_style_shadow_spread(card, 1, 0);
-    lv_obj_set_style_shadow_color(card, lv_color_hex(TTS_COLOR_PURPLE_DARK), 0);
-    lv_obj_set_style_shadow_opa(card, LV_OPA_30, 0);
+    lv_obj_set_style_shadow_width(card, 0, 0);
     lv_obj_set_flex_align(
         card,
         LV_FLEX_ALIGN_CENTER,
@@ -133,6 +157,41 @@ static lv_obj_t *create_sample_card(
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
 
     return card;
+}
+
+bool tts_screen_update(
+    lv_obj_t *body,
+    const ui_manager_state_t *state,
+    const ui_manager_callbacks_t *callbacks
+)
+{
+    (void)callbacks;
+
+    if (
+        body == NULL ||
+        s_view.body != body ||
+        s_view.status_label == NULL ||
+        s_view.sample_1 == NULL ||
+        s_view.sample_2 == NULL
+    ) {
+        return false;
+    }
+
+    const char *status = "Ready";
+    const char *result = "Select a sample text.";
+    bool busy = false;
+
+    if (state != NULL) {
+        status = state->tts_status[0] != '\0' ? state->tts_status : "Ready";
+        result = state->tts_result;
+        busy = state->tts_busy;
+    }
+
+    update_status_label(s_view.status_label, status, result);
+    set_card_enabled(s_view.sample_1, !busy);
+    set_card_enabled(s_view.sample_2, !busy);
+
+    return true;
 }
 
 void tts_screen_render(
@@ -171,7 +230,7 @@ void tts_screen_render(
     );
     lv_obj_set_style_pad_gap(container, 18, 0);
 
-    create_status_label(container, status, result);
+    lv_obj_t *status_label = create_status_label(container, status, result);
 
     lv_obj_t *sample_1 = create_sample_card(
         container,
@@ -189,4 +248,9 @@ void tts_screen_render(
 
     set_card_enabled(sample_1, !busy);
     set_card_enabled(sample_2, !busy);
+
+    s_view.body = body;
+    s_view.status_label = status_label;
+    s_view.sample_1 = sample_1;
+    s_view.sample_2 = sample_2;
 }

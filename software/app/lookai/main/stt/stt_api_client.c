@@ -28,7 +28,7 @@ static const char *TAG = "stt_api_client";
 #define STT_API_CLIENT_BOUNDARY "----LookAIFormBoundary7MA4YWxkTrZu0gW"
 #define STT_API_CLIENT_TIMEOUT_MS 60000
 #define STT_API_CLIENT_FILE_CHUNK_SIZE 1024
-#define STT_API_CLIENT_RESPONSE_MAX_BYTES 8192
+#define STT_API_CLIENT_RESPONSE_MAX_BYTES 4096
 
 static char s_last_error[192] = "";
 

@@ -41,7 +41,19 @@ typedef struct {
     lv_obj_t *message_label;
 } stt_talk_context_t;
 
+typedef struct {
+    lv_obj_t *body;
+    lv_obj_t *status_label;
+    lv_obj_t *message_label;
+    lv_obj_t *talk_button;
+    lv_obj_t *test_button;
+    lv_obj_t *test_label;
+    lv_obj_t *play_button;
+    lv_obj_t *play_label;
+} stt_screen_view_t;
+
 static stt_talk_context_t s_talk_context = {0};
+static stt_screen_view_t s_view = {0};
 
 static void set_button_enabled(lv_obj_t *button, bool enabled)
 {
@@ -235,7 +247,8 @@ static lv_obj_t *create_small_button(
     uint32_t color,
     uint32_t border_color,
     lv_event_cb_t cb,
-    const ui_manager_callbacks_t *callbacks
+    const ui_manager_callbacks_t *callbacks,
+    lv_obj_t **out_label
 )
 {
     lv_obj_t *button = lv_button_create(parent);
@@ -262,7 +275,136 @@ static lv_obj_t *create_small_button(
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_center(label);
 
+    if (out_label != NULL) {
+        *out_label = label;
+    }
+
     return button;
+}
+
+static void stt_screen_apply_dynamic_state(
+    lv_obj_t *status_label,
+    lv_obj_t *message_label,
+    lv_obj_t *talk_button,
+    lv_obj_t *test_button,
+    lv_obj_t *test_label,
+    lv_obj_t *play_button,
+    lv_obj_t *play_label,
+    const ui_manager_state_t *state,
+    const ui_manager_callbacks_t *callbacks
+)
+{
+    const char *status = "Ready";
+    const char *result = "";
+    const char *message = "Hold TALK to record.";
+    uint32_t message_color = UI_COLOR_MUTED;
+
+    bool recording = false;
+    bool processing = false;
+    bool speaker_test_active = false;
+    bool recording_playback_active = false;
+
+    if (state != NULL) {
+        status = state->stt_status[0] != '\0' ? state->stt_status : "Ready";
+        result = state->stt_result;
+        recording = state->stt_recording;
+        processing = state->stt_processing;
+        speaker_test_active = state->stt_speaker_test_active;
+        recording_playback_active = state->stt_recording_playback_active;
+
+        if (result != NULL && result[0] != '\0') {
+            message = result;
+            message_color = UI_COLOR_TEXT;
+        }
+    }
+
+    bool talk_enabled =
+        !processing &&
+        !speaker_test_active &&
+        !recording_playback_active;
+
+    bool test_speaker_enabled =
+        !recording &&
+        !processing &&
+        !recording_playback_active;
+
+    bool play_recording_enabled =
+        !recording &&
+        !processing &&
+        !speaker_test_active &&
+        !recording_playback_active;
+
+    if (status_label != NULL) {
+        lv_label_set_text(status_label, status);
+    }
+
+    if (message_label != NULL) {
+        lv_label_set_text(message_label, message);
+        lv_obj_set_style_text_color(message_label, lv_color_hex(message_color), 0);
+    }
+
+    if (talk_button != NULL) {
+        lv_obj_set_style_bg_color(talk_button, lv_color_hex(STT_COLOR_GREEN), 0);
+        set_button_enabled(talk_button, talk_enabled);
+    }
+
+    if (test_label != NULL) {
+        lv_label_set_text(test_label, speaker_test_active ? "Stop" : "Test");
+    }
+    if (test_button != NULL) {
+        lv_obj_set_style_bg_color(
+            test_button,
+            lv_color_hex(speaker_test_active ? STT_COLOR_GRAY : STT_COLOR_BLUE),
+            0
+        );
+        lv_obj_set_style_border_color(
+            test_button,
+            lv_color_hex(speaker_test_active ? STT_COLOR_GRAY_DARK : STT_COLOR_BLUE_DARK),
+            0
+        );
+        set_button_enabled(test_button, test_speaker_enabled);
+    }
+
+    if (play_label != NULL) {
+        lv_label_set_text(play_label, recording_playback_active ? "Playing" : "Play");
+    }
+    if (play_button != NULL) {
+        set_button_enabled(play_button, play_recording_enabled);
+    }
+
+    s_talk_context.callbacks = callbacks;
+    s_talk_context.status_label = status_label;
+    s_talk_context.message_label = message_label;
+}
+
+bool stt_screen_update(
+    lv_obj_t *body,
+    const ui_manager_state_t *state,
+    const ui_manager_callbacks_t *callbacks
+)
+{
+    if (
+        body == NULL ||
+        s_view.body != body ||
+        s_view.status_label == NULL ||
+        s_view.message_label == NULL ||
+        s_view.talk_button == NULL
+    ) {
+        return false;
+    }
+
+    stt_screen_apply_dynamic_state(
+        s_view.status_label,
+        s_view.message_label,
+        s_view.talk_button,
+        s_view.test_button,
+        s_view.test_label,
+        s_view.play_button,
+        s_view.play_label,
+        state,
+        callbacks
+    );
+    return true;
 }
 
 void stt_screen_render(
@@ -359,10 +501,7 @@ void stt_screen_render(
     lv_obj_set_style_bg_opa(talk_button, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(talk_button, lv_color_hex(STT_COLOR_GREEN_SOFT), 0);
     lv_obj_set_style_border_width(talk_button, 3, 0);
-    lv_obj_set_style_shadow_width(talk_button, 9, 0);
-    lv_obj_set_style_shadow_spread(talk_button, 1, 0);
-    lv_obj_set_style_shadow_color(talk_button, lv_color_hex(STT_COLOR_GREEN_DARK), 0);
-    lv_obj_set_style_shadow_opa(talk_button, LV_OPA_40, 0);
+    lv_obj_set_style_shadow_width(talk_button, 0, 0);
     lv_obj_set_style_pad_all(talk_button, 8, 0);
     lv_obj_set_scrollbar_mode(talk_button, LV_SCROLLBAR_MODE_OFF);
     lv_obj_clear_flag(talk_button, LV_OBJ_FLAG_SCROLLABLE);
@@ -401,23 +540,36 @@ void stt_screen_render(
     );
     lv_obj_set_style_pad_column(action_row, STT_ACTION_BUTTON_GAP, 0);
 
+    lv_obj_t *test_label = NULL;
     lv_obj_t *test_button = create_small_button(
         action_row,
         speaker_test_active ? "Stop" : "Test",
         speaker_test_active ? STT_COLOR_GRAY : STT_COLOR_BLUE,
         speaker_test_active ? STT_COLOR_GRAY_DARK : STT_COLOR_BLUE_DARK,
         test_speaker_button_event_cb,
-        callbacks
+        callbacks,
+        &test_label
     );
     set_button_enabled(test_button, test_speaker_enabled);
 
+    lv_obj_t *play_recording_label = NULL;
     lv_obj_t *play_recording_button = create_small_button(
         action_row,
         recording_playback_active ? "Playing" : "Play",
         STT_COLOR_BLUE,
         STT_COLOR_BLUE_DARK,
         play_recording_button_event_cb,
-        callbacks
+        callbacks,
+        &play_recording_label
     );
     set_button_enabled(play_recording_button, play_recording_enabled);
+
+    s_view.body = body;
+    s_view.status_label = status_label;
+    s_view.message_label = message_label;
+    s_view.talk_button = talk_button;
+    s_view.test_button = test_button;
+    s_view.test_label = test_label;
+    s_view.play_button = play_recording_button;
+    s_view.play_label = play_recording_label;
 }

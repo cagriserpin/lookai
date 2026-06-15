@@ -17,3 +17,12 @@ void ai_screen_render(
     const ui_manager_state_t *state,
     const ui_manager_callbacks_t *callbacks
 );
+
+/**
+ * @brief Update the existing AI screen in place.
+ */
+bool ai_screen_update(
+    lv_obj_t *body,
+    const ui_manager_state_t *state,
+    const ui_manager_callbacks_t *callbacks
+);

@@ -28,7 +28,7 @@ static const char *TAG = "tts_api_client";
 #define TTS_API_CLIENT_PCM_SAMPLE_RATE 24000
 #define TTS_API_CLIENT_PCM_CHANNELS 1
 #define TTS_API_CLIENT_PCM_BITS_PER_SAMPLE 16
-#define TTS_API_CLIENT_ERROR_RESPONSE_MAX_BYTES 2048
+#define TTS_API_CLIENT_ERROR_RESPONSE_MAX_BYTES 1024
 #define TTS_API_CLIENT_MAX_INPUT_CHARS 800
 
 static char s_last_error[192] = "";
@@ -82,6 +82,91 @@ static bool tts_model_supports_instructions(void)
     return strcmp(CONFIG_LOOKAI_TTS_MODEL, "gpt-4o-mini-tts") == 0;
 }
 
+static size_t json_escaped_len(const char *text)
+{
+    if (text == NULL) {
+        return 0;
+    }
+
+    size_t len = 0;
+    const unsigned char *cursor = (const unsigned char *)text;
+    while (*cursor != '\0') {
+        unsigned char c = *cursor++;
+        switch (c) {
+        case '"':
+        case '\\':
+        case '\b':
+        case '\f':
+        case '\n':
+        case '\r':
+        case '\t':
+            len += 2;
+            break;
+        default:
+            len += c < 0x20 ? 6 : 1;
+            break;
+        }
+    }
+    return len;
+}
+
+static char *json_write_escaped(char *out, const char *text)
+{
+    static const char hex[] = "0123456789abcdef";
+
+    if (text == NULL) {
+        return out;
+    }
+
+    const unsigned char *cursor = (const unsigned char *)text;
+    while (*cursor != '\0') {
+        unsigned char c = *cursor++;
+        switch (c) {
+        case '"':
+            *out++ = '\\';
+            *out++ = '"';
+            break;
+        case '\\':
+            *out++ = '\\';
+            *out++ = '\\';
+            break;
+        case '\b':
+            *out++ = '\\';
+            *out++ = 'b';
+            break;
+        case '\f':
+            *out++ = '\\';
+            *out++ = 'f';
+            break;
+        case '\n':
+            *out++ = '\\';
+            *out++ = 'n';
+            break;
+        case '\r':
+            *out++ = '\\';
+            *out++ = 'r';
+            break;
+        case '\t':
+            *out++ = '\\';
+            *out++ = 't';
+            break;
+        default:
+            if (c < 0x20) {
+                *out++ = '\\';
+                *out++ = 'u';
+                *out++ = '0';
+                *out++ = '0';
+                *out++ = hex[(c >> 4) & 0x0f];
+                *out++ = hex[c & 0x0f];
+            } else {
+                *out++ = (char)c;
+            }
+            break;
+        }
+    }
+    return out;
+}
+
 static esp_err_t build_request_body_with_format(const char *text, const char *response_format, char **out_body)
 {
     if (text == NULL || response_format == NULL || response_format[0] == '\0' || out_body == NULL) {
@@ -93,33 +178,69 @@ static esp_err_t build_request_body_with_format(const char *text, const char *re
         return ESP_ERR_INVALID_SIZE;
     }
 
-    cJSON *root = cJSON_CreateObject();
-    if (root == NULL) {
+    const char *instructions =
+        "Turkceyi dogal, net ve sicak bir tonda konus. Cumleleri sakin ve anlasilir oku.";
+    bool include_instructions = tts_model_supports_instructions();
+
+    size_t body_size =
+        128 +
+        json_escaped_len(CONFIG_LOOKAI_TTS_MODEL) +
+        json_escaped_len(CONFIG_LOOKAI_TTS_VOICE) +
+        json_escaped_len(text) +
+        json_escaped_len(response_format) +
+        (include_instructions ? json_escaped_len(instructions) + 32 : 0);
+
+    char *body = (char *)malloc(body_size);
+    if (body == NULL) {
         set_last_error("Could not allocate TTS request JSON.");
         return ESP_ERR_NO_MEM;
     }
 
-    cJSON_AddStringToObject(root, "model", CONFIG_LOOKAI_TTS_MODEL);
-    cJSON_AddStringToObject(root, "voice", CONFIG_LOOKAI_TTS_VOICE);
-    cJSON_AddStringToObject(root, "input", text);
-    cJSON_AddStringToObject(root, "response_format", response_format);
+    char *cursor = body;
+    char *end = body + body_size;
 
-    if (tts_model_supports_instructions()) {
-        cJSON_AddStringToObject(
-            root,
-            "instructions",
-            "Turkceyi dogal, net ve sicak bir tonda konus. Cumleleri sakin ve anlasilir oku."
-        );
+#define APPEND_LITERAL(lit) do { \
+        const size_t _len = sizeof(lit) - 1; \
+        if ((size_t)(end - cursor) <= _len) { \
+            free(body); \
+            set_last_error("TTS request JSON buffer was too small."); \
+            return ESP_ERR_INVALID_SIZE; \
+        } \
+        memcpy(cursor, (lit), _len); \
+        cursor += _len; \
+    } while (0)
+
+#define APPEND_ESCAPED(value) do { \
+        cursor = json_write_escaped(cursor, (value)); \
+        if (cursor >= end) { \
+            free(body); \
+            set_last_error("TTS request JSON buffer overflow."); \
+            return ESP_ERR_INVALID_SIZE; \
+        } \
+    } while (0)
+
+    APPEND_LITERAL("{\"model\":\"");
+    APPEND_ESCAPED(CONFIG_LOOKAI_TTS_MODEL);
+    APPEND_LITERAL("\",\"voice\":\"");
+    APPEND_ESCAPED(CONFIG_LOOKAI_TTS_VOICE);
+    APPEND_LITERAL("\",\"input\":\"");
+    APPEND_ESCAPED(text);
+    APPEND_LITERAL("\",\"response_format\":\"");
+    APPEND_ESCAPED(response_format);
+    APPEND_LITERAL("\"");
+
+    if (include_instructions) {
+        APPEND_LITERAL(",\"instructions\":\"");
+        APPEND_ESCAPED(instructions);
+        APPEND_LITERAL("\"");
     }
 
-    char *body = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
+    APPEND_LITERAL("}");
 
-    if (body == NULL) {
-        set_last_error("Could not serialize TTS request JSON.");
-        return ESP_ERR_NO_MEM;
-    }
+#undef APPEND_LITERAL
+#undef APPEND_ESCAPED
 
+    *cursor = '\0';
     *out_body = body;
     return ESP_OK;
 }

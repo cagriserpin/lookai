@@ -21,6 +21,10 @@
 
 static const char *TAG = "app_controller";
 
+#ifndef CONFIG_LOOKAI_RUNTIME_DIAG_ENABLE
+#define CONFIG_LOOKAI_RUNTIME_DIAG_ENABLE 0
+#endif
+
 /**
  * @brief Reduce expected captive-portal HTTP log noise.
  *
@@ -33,6 +37,23 @@ static void configure_log_levels(void)
     esp_log_level_set("httpd_txrx", ESP_LOG_ERROR);
     esp_log_level_set("httpd_uri", ESP_LOG_ERROR);
     esp_log_level_set("httpd_parse", ESP_LOG_ERROR);
+
+#if !CONFIG_LOOKAI_RUNTIME_DIAG_ENABLE
+    /*
+     * Normal mode: keep serial logging out of the UI/audio/HTTPS hot paths.
+     * Warnings and errors are still visible; detailed TIMING/runtime logs can
+     * be re-enabled from LookAI diagnostics.
+     */
+    esp_log_level_set("runtime_diag", ESP_LOG_WARN);
+    esp_log_level_set("lookai_display", ESP_LOG_WARN);
+    esp_log_level_set("ui_manager", ESP_LOG_WARN);
+    esp_log_level_set("stt_manager", ESP_LOG_WARN);
+    esp_log_level_set("ai_manager", ESP_LOG_WARN);
+    esp_log_level_set("tts_manager", ESP_LOG_WARN);
+    esp_log_level_set("stt_api_client", ESP_LOG_WARN);
+    esp_log_level_set("ai_api_client", ESP_LOG_WARN);
+    esp_log_level_set("tts_api_client", ESP_LOG_WARN);
+#endif
 }
 
 esp_err_t app_controller_start(void)

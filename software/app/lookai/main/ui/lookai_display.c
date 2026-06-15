@@ -27,7 +27,7 @@
  * HTTPS connections. Settings-menu render cost is now attacked with PSRAM-backed
  * item snapshot caching instead of reserving a large internal display buffer.
  */
-#define LOOKAI_DISPLAY_BUFFER_LINES             32
+#define LOOKAI_DISPLAY_BUFFER_LINES             64
 #define LOOKAI_DISPLAY_TRANSFER_GUARD_LINES      2
 #define LOOKAI_DISPLAY_MAX_TRANSFER_LINES       (LOOKAI_DISPLAY_BUFFER_LINES + LOOKAI_DISPLAY_TRANSFER_GUARD_LINES)
 #define LOOKAI_DISPLAY_USE_PSRAM_BUFFER         false
@@ -35,7 +35,12 @@
 
 static const char *TAG = "lookai_display";
 
+#ifndef CONFIG_LOOKAI_DISPLAY_DIAG
+#define CONFIG_LOOKAI_DISPLAY_DIAG 0
+#endif
+
 #if LVGL_VERSION_MAJOR >= 9
+#if CONFIG_LOOKAI_DISPLAY_DIAG
 typedef struct {
     int64_t render_start_us;
     int64_t flush_start_us;
@@ -126,6 +131,8 @@ static void lookai_display_diag_event_cb(lv_event_t *event)
         s_display_diag.invalid_px_sum = 0;
     }
 }
+
+#endif /* CONFIG_LOOKAI_DISPLAY_DIAG */
 
 static void lookai_rounder_event_cb(lv_event_t *e)
 {
@@ -246,11 +253,13 @@ lv_display_t *lookai_display_start(void)
 
 #if LVGL_VERSION_MAJOR >= 9
     lv_display_add_event_cb(display, lookai_rounder_event_cb, LV_EVENT_INVALIDATE_AREA, NULL);
+#if CONFIG_LOOKAI_DISPLAY_DIAG
     lv_display_add_event_cb(display, lookai_display_diag_event_cb, LV_EVENT_RENDER_START, NULL);
     lv_display_add_event_cb(display, lookai_display_diag_event_cb, LV_EVENT_RENDER_READY, NULL);
     lv_display_add_event_cb(display, lookai_display_diag_event_cb, LV_EVENT_FLUSH_START, NULL);
     lv_display_add_event_cb(display, lookai_display_diag_event_cb, LV_EVENT_FLUSH_FINISH, NULL);
     lv_display_add_event_cb(display, lookai_display_diag_event_cb, LV_EVENT_INVALIDATE_AREA, NULL);
+#endif
 #else
     lv_disp_t *display_v8 = (lv_disp_t *)display;
     if (display_v8 != NULL && display_v8->driver != NULL) {

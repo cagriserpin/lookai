@@ -32,7 +32,15 @@ typedef struct {
     lv_obj_t *message_label;
 } ai_talk_context_t;
 
+typedef struct {
+    lv_obj_t *body;
+    lv_obj_t *status_label;
+    lv_obj_t *message_label;
+    lv_obj_t *talk_button;
+} ai_screen_view_t;
+
 static ai_talk_context_t s_talk_context = {0};
+static ai_screen_view_t s_view = {0};
 
 static void set_button_enabled(lv_obj_t *button, bool enabled)
 {
@@ -188,6 +196,81 @@ static lv_obj_t *create_text_panel(
     return panel;
 }
 
+static void ai_screen_apply_dynamic_state(
+    lv_obj_t *status_label,
+    lv_obj_t *message_label,
+    lv_obj_t *talk_button,
+    const ui_manager_state_t *state,
+    const ui_manager_callbacks_t *callbacks
+)
+{
+    const char *status = "Ready";
+    const char *result = "";
+    const char *message = "Hold TALK to ask AI.";
+    uint32_t message_color = UI_COLOR_MUTED;
+
+    bool recording = false;
+    bool busy = false;
+
+    if (state != NULL) {
+        status = state->ai_status[0] != '\0' ? state->ai_status : "Ready";
+        result = state->ai_result;
+        recording = state->ai_recording;
+        busy = state->ai_busy;
+
+        if (result != NULL && result[0] != '\0') {
+            message = result;
+            message_color = UI_COLOR_TEXT;
+        }
+    }
+
+    bool talk_enabled = !busy || recording;
+
+    if (status_label != NULL) {
+        lv_label_set_text(status_label, status);
+    }
+
+    if (message_label != NULL) {
+        lv_label_set_text(message_label, message);
+        lv_obj_set_style_text_color(message_label, lv_color_hex(message_color), 0);
+    }
+
+    if (talk_button != NULL) {
+        lv_obj_set_style_bg_color(talk_button, lv_color_hex(AI_COLOR_CYAN), 0);
+        set_button_enabled(talk_button, talk_enabled);
+    }
+
+    s_talk_context.callbacks = callbacks;
+    s_talk_context.status_label = status_label;
+    s_talk_context.message_label = message_label;
+}
+
+bool ai_screen_update(
+    lv_obj_t *body,
+    const ui_manager_state_t *state,
+    const ui_manager_callbacks_t *callbacks
+)
+{
+    if (
+        body == NULL ||
+        s_view.body != body ||
+        s_view.status_label == NULL ||
+        s_view.message_label == NULL ||
+        s_view.talk_button == NULL
+    ) {
+        return false;
+    }
+
+    ai_screen_apply_dynamic_state(
+        s_view.status_label,
+        s_view.message_label,
+        s_view.talk_button,
+        state,
+        callbacks
+    );
+    return true;
+}
+
 void ai_screen_render(
     lv_obj_t *body,
     const ui_manager_state_t *state,
@@ -261,10 +344,7 @@ void ai_screen_render(
     lv_obj_set_style_bg_opa(talk_button, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(talk_button, lv_color_hex(AI_COLOR_CYAN_SOFT), 0);
     lv_obj_set_style_border_width(talk_button, 3, 0);
-    lv_obj_set_style_shadow_width(talk_button, 9, 0);
-    lv_obj_set_style_shadow_spread(talk_button, 1, 0);
-    lv_obj_set_style_shadow_color(talk_button, lv_color_hex(AI_COLOR_CYAN_DARK), 0);
-    lv_obj_set_style_shadow_opa(talk_button, LV_OPA_40, 0);
+    lv_obj_set_style_shadow_width(talk_button, 0, 0);
     lv_obj_set_style_pad_all(talk_button, 8, 0);
     lv_obj_set_scrollbar_mode(talk_button, LV_SCROLLBAR_MODE_OFF);
     lv_obj_clear_flag(talk_button, LV_OBJ_FLAG_SCROLLABLE);
@@ -287,4 +367,9 @@ void ai_screen_render(
     lv_obj_add_event_cb(talk_button, talk_button_event_cb, LV_EVENT_PRESS_LOST, &s_talk_context);
 
     set_button_enabled(talk_button, talk_enabled);
+
+    s_view.body = body;
+    s_view.status_label = status_label;
+    s_view.message_label = message_label;
+    s_view.talk_button = talk_button;
 }

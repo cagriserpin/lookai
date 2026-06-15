@@ -17,3 +17,12 @@ void tts_screen_render(
     const ui_manager_state_t *state,
     const ui_manager_callbacks_t *callbacks
 );
+
+/**
+ * @brief Update the existing text-to-speech screen in place.
+ */
+bool tts_screen_update(
+    lv_obj_t *body,
+    const ui_manager_state_t *state,
+    const ui_manager_callbacks_t *callbacks
+);

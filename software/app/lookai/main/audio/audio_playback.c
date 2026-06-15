@@ -37,14 +37,14 @@ static const char *TAG = "audio_playback";
 #define AUDIO_PLAYBACK_TASK_PRIORITY 5
 #define AUDIO_PLAYBACK_BUFFER_SIZE 1024
 #define AUDIO_PLAYBACK_WAV_HEADER_SIZE 44
-#define AUDIO_PLAYBACK_STREAM_BUFFER_SIZE (16 * 1024)
+#define AUDIO_PLAYBACK_STREAM_BUFFER_SIZE (12 * 1024)
 #define AUDIO_PLAYBACK_STREAM_TRIGGER_LEVEL 1
 #define AUDIO_PLAYBACK_STREAM_PREBUFFER_BYTES 4096
 #define AUDIO_PLAYBACK_STREAM_TASK_STACK_SIZE 5120
 #define AUDIO_PLAYBACK_STREAM_WAIT_FOREVER_MS UINT32_MAX
-#define AUDIO_PLAYBACK_PCM_RING_BLOCK_COUNT 3
-#define AUDIO_PLAYBACK_PCM_RING_BLOCK_SIZE (16 * 1024)
-#define AUDIO_PLAYBACK_PCM_TASK_STACK_SIZE 5120
+#define AUDIO_PLAYBACK_PCM_RING_BLOCK_COUNT 2
+#define AUDIO_PLAYBACK_PCM_RING_BLOCK_SIZE (12 * 1024)
+#define AUDIO_PLAYBACK_PCM_TASK_STACK_SIZE 4096
 
 #define SINE_440_LUT_COUNT 36
 #define SINE_440_CHUNK_REPEATS 20
@@ -747,8 +747,7 @@ esp_err_t audio_playback_stream_wav_start(
         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
     );
     if (stream->storage == NULL) {
-        ESP_LOGW(TAG, "Could not allocate stream buffer in PSRAM, falling back to default heap");
-        stream->storage = (uint8_t *)malloc(AUDIO_PLAYBACK_STREAM_BUFFER_SIZE);
+        ESP_LOGE(TAG, "Could not allocate stream buffer in PSRAM");
     }
 
     if (stream->storage == NULL) {
@@ -1121,10 +1120,7 @@ esp_err_t audio_playback_stream_pcm_start(
         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
     );
     if (stream->storage == NULL) {
-        ESP_LOGW(TAG, "Could not allocate PCM ring in PSRAM, falling back to default heap");
-        stream->storage = (uint8_t *)malloc(
-            AUDIO_PLAYBACK_PCM_RING_BLOCK_COUNT * AUDIO_PLAYBACK_PCM_RING_BLOCK_SIZE
-        );
+        ESP_LOGE(TAG, "Could not allocate PCM ring in PSRAM");
     }
 
     if (stream->storage == NULL) {

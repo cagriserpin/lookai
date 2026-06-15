@@ -20,3 +20,15 @@ void stt_screen_render(
     const ui_manager_state_t *state,
     const ui_manager_callbacks_t *callbacks
 );
+
+/**
+ * @brief Update the existing speech-to-text screen in place.
+ *
+ * Returns false when the cached object tree is not available and the caller
+ * should fall back to a full render.
+ */
+bool stt_screen_update(
+    lv_obj_t *body,
+    const ui_manager_state_t *state,
+    const ui_manager_callbacks_t *callbacks
+);

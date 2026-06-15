@@ -29,6 +29,10 @@
 
 static const char *TAG = "ui_manager";
 
+#ifndef CONFIG_LOOKAI_RUNTIME_DIAG_ENABLE
+#define CONFIG_LOOKAI_RUNTIME_DIAG_ENABLE 0
+#endif
+
 static menu_controller_t s_menu;
 static ui_manager_callbacks_t s_callbacks = {0};
 
@@ -433,6 +437,7 @@ static void body_scroll_diag_event_cb(lv_event_t *event)
 
 static void attach_body_diag(lv_obj_t *body)
 {
+#if CONFIG_LOOKAI_RUNTIME_DIAG_ENABLE
     if (body == NULL) {
         return;
     }
@@ -440,6 +445,30 @@ static void attach_body_diag(lv_obj_t *body)
     lv_obj_add_event_cb(body, body_scroll_diag_event_cb, LV_EVENT_SCROLL_BEGIN, NULL);
     lv_obj_add_event_cb(body, body_scroll_diag_event_cb, LV_EVENT_SCROLL, NULL);
     lv_obj_add_event_cb(body, body_scroll_diag_event_cb, LV_EVENT_SCROLL_END, NULL);
+#else
+    (void)body;
+#endif
+}
+
+static bool update_current_body_in_place(lv_obj_t *body)
+{
+    if (body == NULL) {
+        return false;
+    }
+
+    switch (menu_controller_current(&s_menu)) {
+        case MENU_SCREEN_STT:
+            return stt_screen_update(body, &s_state, &s_callbacks);
+
+        case MENU_SCREEN_AI:
+            return ai_screen_update(body, &s_state, &s_callbacks);
+
+        case MENU_SCREEN_TTS:
+            return tts_screen_update(body, &s_state, &s_callbacks);
+
+        default:
+            return false;
+    }
 }
 
 static void render_body_unlocked(lv_obj_t *body)
@@ -605,6 +634,14 @@ static void render_body_only_locked(void)
         render_current_unlocked();
         bsp_display_unlock();
         runtime_diag_log_duration("ui_render_body_only_total_missing_body", total_start_us);
+        return;
+    }
+
+    if (update_current_body_in_place(s_body)) {
+        int64_t unlock_start_us = runtime_diag_now_us();
+        bsp_display_unlock();
+        runtime_diag_log_duration("ui_render_body_only_in_place_unlock", unlock_start_us);
+        runtime_diag_log_duration("ui_render_body_only_in_place_total", total_start_us);
         return;
     }
 

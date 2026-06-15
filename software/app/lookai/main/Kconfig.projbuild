@@ -150,9 +150,26 @@ endmenu
 
 menu "LookAI diagnostics"
 
+    config LOOKAI_RUNTIME_DIAG_ENABLE
+        bool "Enable runtime heap/stack/timing logs"
+        default n
+        help
+            Enable verbose runtime diagnostics. Keep this disabled for normal
+            use because heap snapshots, stack high-water-mark checks, and
+            serial logging add CPU load and can reduce UI/audio smoothness.
+
+    config LOOKAI_DISPLAY_DIAG
+        bool "Enable LVGL render/flush sample logs"
+        default n
+        depends on LOOKAI_RUNTIME_DIAG_ENABLE
+        help
+            Log 1-second LVGL render/flush/invalid-area samples. Useful while
+            tuning the display, but it adds event callbacks and UART traffic.
+
     config LOOKAI_RUNTIME_DIAG_STACK_REPORT
         bool "Log FreeRTOS task stack report"
-        default y
+        default n
+        depends on LOOKAI_RUNTIME_DIAG_ENABLE
         select FREERTOS_USE_TRACE_FACILITY
         help
             Create a low-priority diagnostics task that logs every live
@@ -169,7 +186,7 @@ menu "LookAI diagnostics"
 
     config LOOKAI_RUNTIME_DIAG_STACK_REPORT_MAX_TASKS
         int "FreeRTOS task stack report max tasks"
-        default 48
+        default 32
         range 8 128
         depends on LOOKAI_RUNTIME_DIAG_STACK_REPORT
         help
@@ -178,7 +195,7 @@ menu "LookAI diagnostics"
 
     config LOOKAI_RUNTIME_DIAG_STACK_REPORT_TASK_STACK_BYTES
         int "FreeRTOS task stack report task stack size (bytes)"
-        default 4096
+        default 3072
         range 2048 8192
         depends on LOOKAI_RUNTIME_DIAG_STACK_REPORT
         help

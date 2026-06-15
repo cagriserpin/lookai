@@ -25,7 +25,7 @@
 static const char *TAG = "ai_api_client";
 
 #define AI_API_CLIENT_TIMEOUT_MS 60000
-#define AI_API_CLIENT_RESPONSE_MAX_BYTES 8192
+#define AI_API_CLIENT_RESPONSE_MAX_BYTES 4096
 #define AI_API_CLIENT_TX_BUFFER_SIZE 1024
 #define AI_API_CLIENT_RX_BUFFER_SIZE 1024
 
@@ -73,6 +73,91 @@ static const char *select_api_key(void)
     }
 
     return CONFIG_LOOKAI_STT_API_KEY;
+}
+
+static size_t json_escaped_len(const char *text)
+{
+    if (text == NULL) {
+        return 0;
+    }
+
+    size_t len = 0;
+    const unsigned char *cursor = (const unsigned char *)text;
+    while (*cursor != '\0') {
+        unsigned char c = *cursor++;
+        switch (c) {
+        case '"':
+        case '\\':
+        case '\b':
+        case '\f':
+        case '\n':
+        case '\r':
+        case '\t':
+            len += 2;
+            break;
+        default:
+            len += c < 0x20 ? 6 : 1;
+            break;
+        }
+    }
+    return len;
+}
+
+static char *json_write_escaped(char *out, const char *text)
+{
+    static const char hex[] = "0123456789abcdef";
+
+    if (text == NULL) {
+        return out;
+    }
+
+    const unsigned char *cursor = (const unsigned char *)text;
+    while (*cursor != '\0') {
+        unsigned char c = *cursor++;
+        switch (c) {
+        case '"':
+            *out++ = '\\';
+            *out++ = '"';
+            break;
+        case '\\':
+            *out++ = '\\';
+            *out++ = '\\';
+            break;
+        case '\b':
+            *out++ = '\\';
+            *out++ = 'b';
+            break;
+        case '\f':
+            *out++ = '\\';
+            *out++ = 'f';
+            break;
+        case '\n':
+            *out++ = '\\';
+            *out++ = 'n';
+            break;
+        case '\r':
+            *out++ = '\\';
+            *out++ = 'r';
+            break;
+        case '\t':
+            *out++ = '\\';
+            *out++ = 't';
+            break;
+        default:
+            if (c < 0x20) {
+                *out++ = '\\';
+                *out++ = 'u';
+                *out++ = '0';
+                *out++ = '0';
+                *out++ = hex[(c >> 4) & 0x0f];
+                *out++ = hex[c & 0x0f];
+            } else {
+                *out++ = (char)c;
+            }
+            break;
+        }
+    }
+    return out;
 }
 
 static esp_err_t write_all(
@@ -160,45 +245,84 @@ static esp_err_t build_request_body(const char *prompt, char **out_body)
         return ESP_ERR_INVALID_ARG;
     }
 
-    cJSON *root = cJSON_CreateObject();
-    cJSON *messages = cJSON_CreateArray();
-    cJSON *system_msg = cJSON_CreateObject();
-    cJSON *user_msg = cJSON_CreateObject();
+    char max_tokens_text[16];
+    int max_tokens_written = snprintf(
+        max_tokens_text,
+        sizeof(max_tokens_text),
+        "%d",
+        CONFIG_LOOKAI_AI_MAX_TOKENS
+    );
+    if (max_tokens_written < 0 || (size_t)max_tokens_written >= sizeof(max_tokens_text)) {
+        set_last_error("Could not serialize AI max_tokens.");
+        return ESP_ERR_INVALID_SIZE;
+    }
 
-    if (root == NULL || messages == NULL || system_msg == NULL || user_msg == NULL) {
-        cJSON_Delete(root);
-        cJSON_Delete(messages);
-        cJSON_Delete(system_msg);
-        cJSON_Delete(user_msg);
+    const char *model = CONFIG_LOOKAI_AI_MODEL;
+    const char *system_prompt = CONFIG_LOOKAI_AI_SYSTEM_PROMPT;
+
+    size_t body_size =
+        160 +
+        json_escaped_len(model) +
+        json_escaped_len(system_prompt) +
+        json_escaped_len(prompt) +
+        strlen(max_tokens_text);
+
+    char *body = (char *)malloc(body_size);
+    if (body == NULL) {
         set_last_error("Could not allocate AI request JSON.");
         return ESP_ERR_NO_MEM;
     }
 
-    cJSON_AddStringToObject(root, "model", CONFIG_LOOKAI_AI_MODEL);
-    cJSON_AddNumberToObject(root, "max_tokens", CONFIG_LOOKAI_AI_MAX_TOKENS);
-    cJSON_AddNumberToObject(root, "temperature", 0.4);
+    char *cursor = body;
+    char *end = body + body_size;
 
-    cJSON_AddStringToObject(system_msg, "role", "system");
-    cJSON_AddStringToObject(system_msg, "content", CONFIG_LOOKAI_AI_SYSTEM_PROMPT);
-    cJSON_AddItemToArray(messages, system_msg);
-    system_msg = NULL;
+#define APPEND_LITERAL(lit) do { \
+        const size_t _len = sizeof(lit) - 1; \
+        if ((size_t)(end - cursor) <= _len) { \
+            free(body); \
+            set_last_error("AI request JSON buffer was too small."); \
+            return ESP_ERR_INVALID_SIZE; \
+        } \
+        memcpy(cursor, (lit), _len); \
+        cursor += _len; \
+    } while (0)
 
-    cJSON_AddStringToObject(user_msg, "role", "user");
-    cJSON_AddStringToObject(user_msg, "content", prompt);
-    cJSON_AddItemToArray(messages, user_msg);
-    user_msg = NULL;
+#define APPEND_ESCAPED(value) do { \
+        cursor = json_write_escaped(cursor, (value)); \
+        if (cursor >= end) { \
+            free(body); \
+            set_last_error("AI request JSON buffer overflow."); \
+            return ESP_ERR_INVALID_SIZE; \
+        } \
+    } while (0)
 
-    cJSON_AddItemToObject(root, "messages", messages);
-    messages = NULL;
+#define APPEND_TEXT(text_value) do { \
+        const char *_text = (text_value); \
+        const size_t _len = strlen(_text); \
+        if ((size_t)(end - cursor) <= _len) { \
+            free(body); \
+            set_last_error("AI request JSON buffer was too small."); \
+            return ESP_ERR_INVALID_SIZE; \
+        } \
+        memcpy(cursor, _text, _len); \
+        cursor += _len; \
+    } while (0)
 
-    char *body = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
+    APPEND_LITERAL("{\"model\":\"");
+    APPEND_ESCAPED(model);
+    APPEND_LITERAL("\",\"max_tokens\":");
+    APPEND_TEXT(max_tokens_text);
+    APPEND_LITERAL(",\"temperature\":0.4,\"messages\":[{\"role\":\"system\",\"content\":\"");
+    APPEND_ESCAPED(system_prompt);
+    APPEND_LITERAL("\"},{\"role\":\"user\",\"content\":\"");
+    APPEND_ESCAPED(prompt);
+    APPEND_LITERAL("\"}]}");
 
-    if (body == NULL) {
-        set_last_error("Could not serialize AI request JSON.");
-        return ESP_ERR_NO_MEM;
-    }
+#undef APPEND_LITERAL
+#undef APPEND_ESCAPED
+#undef APPEND_TEXT
 
+    *cursor = '\0';
     *out_body = body;
     return ESP_OK;
 }

@@ -19,6 +19,10 @@
 
 static const char *TAG = "runtime_diag";
 
+#ifndef CONFIG_LOOKAI_RUNTIME_DIAG_ENABLE
+#define CONFIG_LOOKAI_RUNTIME_DIAG_ENABLE 0
+#endif
+
 #ifndef CONFIG_LOOKAI_RUNTIME_DIAG_STACK_REPORT
 #define CONFIG_LOOKAI_RUNTIME_DIAG_STACK_REPORT 0
 #endif
@@ -53,7 +57,7 @@ typedef struct {
     size_t stack_bytes;
 } runtime_diag_snapshot_t;
 
-#if CONFIG_LOOKAI_RUNTIME_DIAG_STACK_REPORT
+#if CONFIG_LOOKAI_RUNTIME_DIAG_ENABLE && CONFIG_LOOKAI_RUNTIME_DIAG_STACK_REPORT
 static TaskHandle_t s_stack_report_task_handle = NULL;
 
 #if CONFIG_FREERTOS_USE_TRACE_FACILITY
@@ -80,7 +84,7 @@ static void runtime_diag_take_snapshot(runtime_diag_snapshot_t *snapshot)
     snapshot->stack_bytes = (size_t)uxTaskGetStackHighWaterMark(NULL);
 }
 
-#if CONFIG_LOOKAI_RUNTIME_DIAG_STACK_REPORT && CONFIG_FREERTOS_USE_TRACE_FACILITY
+#if CONFIG_LOOKAI_RUNTIME_DIAG_ENABLE && CONFIG_LOOKAI_RUNTIME_DIAG_STACK_REPORT && CONFIG_FREERTOS_USE_TRACE_FACILITY
 static const char *runtime_diag_task_state_name(eTaskState state)
 {
     switch (state) {
@@ -192,7 +196,7 @@ int64_t runtime_diag_now_us(void)
 
 esp_err_t runtime_diag_start_task_stack_report(void)
 {
-#if CONFIG_LOOKAI_RUNTIME_DIAG_STACK_REPORT
+#if CONFIG_LOOKAI_RUNTIME_DIAG_ENABLE && CONFIG_LOOKAI_RUNTIME_DIAG_STACK_REPORT
 #if CONFIG_FREERTOS_USE_TRACE_FACILITY
     if (s_stack_report_task_handle != NULL) {
         return ESP_OK;
@@ -234,6 +238,7 @@ esp_err_t runtime_diag_start_task_stack_report(void)
 
 void runtime_diag_log(const char *point)
 {
+#if CONFIG_LOOKAI_RUNTIME_DIAG_ENABLE
     const char *name = point != NULL ? point : "unknown";
     runtime_diag_snapshot_t snapshot = {0};
     runtime_diag_take_snapshot(&snapshot);
@@ -250,10 +255,14 @@ void runtime_diag_log(const char *point)
         (unsigned int)snapshot.spiram_largest,
         (unsigned int)snapshot.stack_bytes
     );
+#else
+    (void)point;
+#endif
 }
 
 void runtime_diag_log_duration(const char *point, int64_t start_us)
 {
+#if CONFIG_LOOKAI_RUNTIME_DIAG_ENABLE
     const char *name = point != NULL ? point : "unknown";
     int64_t now_us = runtime_diag_now_us();
     int64_t duration_us = now_us - start_us;
@@ -278,6 +287,10 @@ void runtime_diag_log_duration(const char *point, int64_t start_us)
         (unsigned int)snapshot.spiram_largest,
         (unsigned int)snapshot.stack_bytes
     );
+#else
+    (void)point;
+    (void)start_us;
+#endif
 }
 
 void runtime_diag_log_sample(
@@ -288,6 +301,7 @@ void runtime_diag_log_sample(
     uint32_t count
 )
 {
+#if CONFIG_LOOKAI_RUNTIME_DIAG_ENABLE
     const char *name = point != NULL ? point : "unknown";
     if (elapsed_us < 0) {
         elapsed_us = 0;
@@ -303,4 +317,11 @@ void runtime_diag_log_sample(
         (long)value_b,
         (unsigned int)count
     );
+#else
+    (void)point;
+    (void)elapsed_us;
+    (void)value_a;
+    (void)value_b;
+    (void)count;
+#endif
 }
