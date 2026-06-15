@@ -6,6 +6,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdbool.h>
 
 #include "esp_err.h"
 
@@ -25,6 +26,18 @@ esp_err_t stt_api_client_transcribe_wav(
     const char *wav_path,
     char *out_text,
     size_t out_text_size
+);
+
+
+/**
+ * @brief Return token usage from the most recent successful STT response.
+ *
+ * @return true when the response included usage information.
+ */
+bool stt_api_client_get_last_token_usage(
+    int *input_tokens,
+    int *output_tokens,
+    int *total_tokens
 );
 
 /**

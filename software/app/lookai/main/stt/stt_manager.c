@@ -251,6 +251,64 @@ static void restore_stable_status(void)
     );
 }
 
+static void append_cstr_truncated(char *out, size_t out_size, const char *text)
+{
+    if (out == NULL || out_size == 0 || text == NULL) {
+        return;
+    }
+
+    size_t used = strnlen(out, out_size);
+    if (used >= out_size - 1) {
+        out[out_size - 1] = '\0';
+        return;
+    }
+
+    size_t free_len = out_size - used - 1;
+    size_t copy_len = strnlen(text, free_len);
+    memcpy(out + used, text, copy_len);
+    out[used + copy_len] = '\0';
+}
+
+static void build_stt_result_with_tokens(
+    char *out,
+    size_t out_size,
+    const char *transcript
+)
+{
+    if (out == NULL || out_size == 0) {
+        return;
+    }
+
+    out[0] = '\0';
+    append_cstr_truncated(out, out_size, transcript != NULL ? transcript : "");
+
+    int input_tokens = 0;
+    int output_tokens = 0;
+    int total_tokens = 0;
+
+    bool has_usage = stt_api_client_get_last_token_usage(
+        &input_tokens,
+        &output_tokens,
+        &total_tokens
+    );
+    (void)total_tokens;
+
+    if (!has_usage) {
+        return;
+    }
+
+    char token_line[96] = {0};
+    snprintf(
+        token_line,
+        sizeof(token_line),
+        "\n(STT: in %d / out %d)",
+        input_tokens,
+        output_tokens
+    );
+
+    append_cstr_truncated(out, out_size, token_line);
+}
+
 static bool is_busy_for_new_action(void)
 {
     return
@@ -348,10 +406,16 @@ static void transcribe_task(void *arg)
 
     if (err == ESP_OK) {
         s_transcribe_success = true;
+        char display_transcript[STT_TRANSCRIPT_BUFFER_SIZE];
         copy_tr_ascii_text(
             transcript,
+            display_transcript,
+            sizeof(display_transcript)
+        );
+        build_stt_result_with_tokens(
             s_transcribe_result,
-            sizeof(s_transcribe_result)
+            sizeof(s_transcribe_result),
+            display_transcript
         );
     } else {
         const char *api_error = stt_api_client_get_last_error();

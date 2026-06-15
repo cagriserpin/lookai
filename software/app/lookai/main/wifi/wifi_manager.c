@@ -7,9 +7,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "esp_err.h"
 #include "esp_log.h"
+#include "esp_sntp.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -54,6 +56,7 @@ static char s_pending_password[65] = {0};
 static bool s_pending_credentials_valid = false;
 
 static bool s_setup_portal_active = false;
+static bool s_wifi_enabled = true;
 static bool s_auto_connect_attempt = false;
 static bool s_reconnect_mode = false;
 static bool s_manual_setup_requested = false;
@@ -77,6 +80,23 @@ typedef struct {
 static esp_err_t start_setup_portal_sync(void);
 static void update_saved_networks_ui_cache(void);
 static void update_wifi_status(const char *status);
+
+static void start_sntp_once(void)
+{
+    static bool sntp_started = false;
+
+    if (sntp_started) {
+        return;
+    }
+
+    setenv("TZ", "TRT-3", 1);
+    tzset();
+
+    esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    esp_sntp_setservername(0, "pool.ntp.org");
+    esp_sntp_init();
+    sntp_started = true;
+}
 
 
 static void copy_string_truncated(char *dst, size_t dst_size, const char *src)
@@ -139,7 +159,8 @@ static void update_wifi_status(const char *status)
         wifi_ap_get_sta_ssid(),
         wifi_ap_get_sta_ip(),
         get_saved_count(),
-        s_setup_portal_active
+        s_setup_portal_active,
+        wifi_ap_get_sta_rssi()
     );
 
     update_saved_networks_ui_cache();
@@ -262,6 +283,11 @@ static void schedule_close_setup_portal(void)
 
 static void start_setup_portal_task(void *arg)
 {
+    if (!s_wifi_enabled) {
+        s_start_setup_task_handle = NULL;
+        vTaskDelete(NULL);
+        return;
+    }
     start_setup_portal_sync();
 
     s_start_setup_task_handle = NULL;
@@ -319,6 +345,11 @@ static void connect_another_network_task(void *arg)
 
 static void on_connect_another_pressed(void)
 {
+    if (!s_wifi_enabled) {
+        update_wifi_status("Wi-Fi disabled");
+        return;
+    }
+
     s_manual_setup_requested = true;
 
     if (s_connect_another_task_handle != NULL) {
@@ -352,6 +383,11 @@ static void connect_saved_task(void *arg)
 
 static void on_connect_saved_network(const char *ssid)
 {
+    if (!s_wifi_enabled) {
+        update_wifi_status("Wi-Fi disabled");
+        return;
+    }
+
     if (ssid == NULL || ssid[0] == '\0') {
         return;
     }
@@ -413,7 +449,7 @@ static void reconnect_task(void *arg)
 {
     ESP_LOGI(TAG, "Reconnect task started");
 
-    while (!wifi_ap_is_sta_connected()) {
+    while (s_wifi_enabled && !wifi_ap_is_sta_connected()) {
         if (s_manual_setup_requested) {
             ESP_LOGI(TAG, "Reconnect task stopped because setup portal was requested");
             break;
@@ -497,6 +533,9 @@ static void on_wifi_ap_event(wifi_ap_event_t event)
 
 static void handle_wifi_event(wifi_ap_event_t event)
 {
+    if (!s_wifi_enabled) {
+        return;
+    }
     if (event == WIFI_AP_EVENT_CLIENT_CONNECTED) {
         update_wifi_status("Device connected");
     }
@@ -535,6 +574,7 @@ static void handle_wifi_event(wifi_ap_event_t event)
         s_manual_setup_requested = false;
 
         save_pending_credentials_if_needed();
+        start_sntp_once();
 
         /*
          * If the setup portal is still running, do not repaint the UI right at
@@ -766,6 +806,12 @@ static bool try_saved_wifi_on_boot(void)
 
 static void boot_wifi_task(void *arg)
 {
+    if (!s_wifi_enabled) {
+        s_boot_wifi_task_handle = NULL;
+        vTaskDelete(NULL);
+        return;
+    }
+
     bool saved_connect_started = try_saved_wifi_on_boot();
 
     if (!saved_connect_started && !s_manual_setup_requested && !s_setup_portal_active) {
@@ -776,6 +822,50 @@ static void boot_wifi_task(void *arg)
     vTaskDelete(NULL);
 }
 
+
+
+void wifi_manager_disable(void)
+{
+    ESP_LOGI(TAG, "Disabling Wi-Fi by user request");
+    s_wifi_enabled = false;
+    s_manual_setup_requested = false;
+
+    captive_portal_stop();
+    dns_server_stop();
+    wifi_ap_stop_all();
+    s_setup_portal_active = false;
+
+    update_wifi_status("Wi-Fi disabled");
+}
+
+void wifi_manager_enable(void)
+{
+    ESP_LOGI(TAG, "Enabling Wi-Fi by user request");
+    if (s_wifi_enabled) {
+        update_wifi_status(wifi_ap_is_sta_connected() ? "Connected" : "Starting Wi-Fi");
+        return;
+    }
+
+    s_wifi_enabled = true;
+    s_manual_setup_requested = false;
+    update_wifi_status("Starting Wi-Fi");
+
+    if (s_boot_wifi_task_handle == NULL) {
+        BaseType_t ok = xTaskCreate(
+            boot_wifi_task,
+            "boot_wifi",
+            WIFI_MANAGER_BOOT_TASK_STACK_SIZE,
+            NULL,
+            5,
+            &s_boot_wifi_task_handle
+        );
+        if (ok != pdPASS) {
+            ESP_LOGE(TAG, "Failed to create boot Wi-Fi task while enabling Wi-Fi");
+            s_boot_wifi_task_handle = NULL;
+            update_wifi_status("Wi-Fi start failed");
+        }
+    }
+}
 
 /**
  * @brief Open the setup portal to add or switch to another Wi-Fi network.
@@ -871,7 +961,7 @@ esp_err_t wifi_manager_start(void)
 
     wifi_ap_set_event_cb(on_wifi_ap_event);
 
-    ui_manager_show_settings();
+    s_wifi_enabled = true;
     update_wifi_status("Starting Wi-Fi");
 
     ok = xTaskCreate(

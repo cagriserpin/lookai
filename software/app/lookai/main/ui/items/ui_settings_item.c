@@ -8,8 +8,15 @@
 #include "ui_icons.h"
 #include "ui_theme.h"
 
+#include <stdbool.h>
+#include <string.h>
+
 #ifndef UI_SETTINGS_ITEM_ICON_FONT
 #define UI_SETTINGS_ITEM_ICON_FONT (&lv_font_montserrat_18)
+#endif
+
+#ifndef UI_SETTINGS_ITEM_TEXT_ICON_FONT
+#define UI_SETTINGS_ITEM_TEXT_ICON_FONT (&lv_font_montserrat_14)
 #endif
 
 #ifndef UI_SETTINGS_ITEM_TITLE_FONT
@@ -27,7 +34,10 @@ static void create_text_icon(lv_obj_t *icon_circle, const char *text)
     lv_obj_t *icon = lv_label_create(icon_circle);
 
     lv_label_set_text_static(icon, text != NULL ? text : "");
-    lv_obj_set_style_text_font(icon, UI_SETTINGS_ITEM_ICON_FONT, 0);
+    const bool small_text_icon =
+        text != NULL &&
+        (strcmp(text, "AI") == 0 || strcmp(text, "STT") == 0 || strcmp(text, "TTS") == 0);
+    lv_obj_set_style_text_font(icon, small_text_icon ? UI_SETTINGS_ITEM_TEXT_ICON_FONT : UI_SETTINGS_ITEM_ICON_FONT, 0);
     lv_obj_set_style_text_color(icon, lv_color_hex(UI_COLOR_TEXT), 0);
     lv_obj_center(icon);
 }

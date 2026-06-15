@@ -37,7 +37,7 @@ void menu_controller_init(
 menu_screen_t menu_controller_current(const menu_controller_t *controller)
 {
     if (controller == NULL || controller->top < 0 || controller->top >= MENU_CONTROLLER_MAX_DEPTH) {
-        return MENU_SCREEN_SETTINGS;
+        return MENU_SCREEN_HOME;
     }
 
     return controller->stack[controller->top];

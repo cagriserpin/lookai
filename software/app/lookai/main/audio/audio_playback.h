@@ -188,3 +188,8 @@ bool audio_playback_is_test_tone_playing(void);
  * @brief Return true while any playback path is active.
  */
 bool audio_playback_is_busy(void);
+
+/**
+ * @brief Request the currently active playback stream/file to stop.
+ */
+esp_err_t audio_playback_stop_current(void);

@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "runtime_diag.h"
+#include "ui_loading_dots.h"
 #include "ui_theme.h"
 
 #ifndef AI_TALK_FONT
@@ -39,6 +40,7 @@ typedef struct {
     lv_obj_t *status_label;
     lv_obj_t *message_label;
     lv_obj_t *talk_button;
+    lv_obj_t *loading_dots;
 } ai_screen_view_t;
 
 static ai_talk_context_t s_talk_context = {0};
@@ -77,6 +79,23 @@ static void set_label_text_if_changed(lv_obj_t *label, const char *text)
     }
 }
 
+static bool ai_status_equals(const char *status, const char *value)
+{
+    return status != NULL && value != NULL && strcmp(status, value) == 0;
+}
+
+static void set_label_hidden(lv_obj_t *label, bool hidden)
+{
+    if (label == NULL) {
+        return;
+    }
+    if (hidden) {
+        lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_clear_flag(label, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
 static void talk_button_event_cb(lv_event_t *event)
 {
     lv_event_code_t code = lv_event_get_code(event);
@@ -102,6 +121,7 @@ static void talk_button_event_cb(lv_event_t *event)
         }
 
         if (context->message_label != NULL) {
+            set_label_hidden(context->message_label, false);
             lv_label_set_text(context->message_label, "Release TALK to ask AI.");
         }
 
@@ -121,6 +141,7 @@ static void talk_button_event_cb(lv_event_t *event)
         }
 
         if (context->message_label != NULL) {
+            set_label_hidden(context->message_label, false);
             lv_label_set_text(context->message_label, "Preparing recording.");
         }
 
@@ -164,7 +185,8 @@ static lv_obj_t *create_text_panel(
     const char *message,
     uint32_t message_color,
     lv_obj_t **out_status_label,
-    lv_obj_t **out_message_label
+    lv_obj_t **out_message_label,
+    lv_obj_t **out_loading_dots
 )
 {
     lv_obj_t *panel = lv_obj_create(parent);
@@ -210,12 +232,19 @@ static lv_obj_t *create_text_panel(
         LV_TEXT_ALIGN_LEFT
     );
 
+    lv_obj_t *loading_dots = ui_loading_dots_create(panel, AI_COLOR_CYAN_SOFT);
+    ui_loading_dots_set_active(loading_dots, false);
+
     if (out_status_label != NULL) {
         *out_status_label = status_label;
     }
 
     if (out_message_label != NULL) {
         *out_message_label = message_label;
+    }
+
+    if (out_loading_dots != NULL) {
+        *out_loading_dots = loading_dots;
     }
 
     return panel;
@@ -225,6 +254,7 @@ static void ai_screen_apply_dynamic_state(
     lv_obj_t *status_label,
     lv_obj_t *message_label,
     lv_obj_t *talk_button,
+    lv_obj_t *loading_dots,
     const ui_manager_state_t *state,
     const ui_manager_callbacks_t *callbacks
 )
@@ -236,20 +266,39 @@ static void ai_screen_apply_dynamic_state(
 
     bool recording = false;
     bool busy = false;
+    bool wifi_connected = true;
+    bool hide_message = false;
 
     if (state != NULL) {
         status = state->ai_status[0] != '\0' ? state->ai_status : "Ready";
         result = state->ai_result;
         recording = state->ai_recording;
         busy = state->ai_busy;
+        wifi_connected = state->wifi_connected;
 
-        if (result != NULL && result[0] != '\0') {
+        if (!state->wifi_connected) {
+            message = "Connect Wi-Fi to ask AI.";
+            message_color = UI_COLOR_WARNING;
+        } else if (ai_status_equals(status, "Transcribing")) {
+            /* During STT upload/recognition keep the panel calm: stage title
+             * on top, only the loading dots below.
+             */
+            message = "";
+            hide_message = true;
+        } else if (ai_status_equals(status, "Thinking")) {
+            /* When transcription is done, keep the transcript visible while
+             * the assistant thinks. The same loading dots stay below it.
+             */
+            message = (result != NULL && result[0] != '\0') ? result : "Transcript ready.";
+            message_color = UI_COLOR_TEXT;
+        } else if (result != NULL && result[0] != '\0') {
             message = result;
             message_color = UI_COLOR_TEXT;
         }
     }
 
-    bool talk_enabled = !busy || recording;
+    bool talk_enabled = wifi_connected;
+    bool loading = wifi_connected && busy && !recording && !ai_status_equals(status, "Speaking");
 
     if (status_label != NULL) {
         set_label_text_if_changed(status_label, status);
@@ -258,6 +307,7 @@ static void ai_screen_apply_dynamic_state(
     if (message_label != NULL) {
         set_label_text_if_changed(message_label, message);
         lv_obj_set_style_text_color(message_label, lv_color_hex(message_color), 0);
+        set_label_hidden(message_label, hide_message);
     }
 
     if (talk_button != NULL) {
@@ -265,11 +315,12 @@ static void ai_screen_apply_dynamic_state(
         set_button_enabled(talk_button, talk_enabled);
     }
 
+    ui_loading_dots_set_active(loading_dots, loading);
+
     s_talk_context.callbacks = callbacks;
     s_talk_context.status_label = status_label;
     s_talk_context.message_label = message_label;
 }
-
 bool ai_screen_update(
     lv_obj_t *body,
     const ui_manager_state_t *state,
@@ -290,6 +341,7 @@ bool ai_screen_update(
         s_view.status_label,
         s_view.message_label,
         s_view.talk_button,
+        s_view.loading_dots,
         state,
         callbacks
     );
@@ -309,23 +361,33 @@ void ai_screen_render(
 
     bool recording = false;
     bool busy = false;
-    bool speaking = false;
+    bool wifi_connected = true;
+    bool hide_message = false;
 
     if (state != NULL) {
         status = state->ai_status[0] != '\0' ? state->ai_status : "Ready";
         result = state->ai_result;
         recording = state->ai_recording;
         busy = state->ai_busy;
-        speaking = state->ai_speaking;
+        wifi_connected = state->wifi_connected;
 
-        if (result != NULL && result[0] != '\0') {
+        if (!state->wifi_connected) {
+            message = "Connect Wi-Fi to ask AI.";
+            message_color = UI_COLOR_WARNING;
+        } else if (ai_status_equals(status, "Transcribing")) {
+            message = "";
+            hide_message = true;
+        } else if (ai_status_equals(status, "Thinking")) {
+            message = (result != NULL && result[0] != '\0') ? result : "Transcript ready.";
+            message_color = UI_COLOR_TEXT;
+        } else if (result != NULL && result[0] != '\0') {
             message = result;
             message_color = UI_COLOR_TEXT;
         }
     }
 
-    bool talk_enabled = !busy || recording;
-    (void)speaking;
+    bool talk_enabled = wifi_connected;
+    bool loading = wifi_connected && busy && !recording && !ai_status_equals(status, "Speaking");
 
     /*
      * The AI page itself is fixed. Only the top text panel scrolls.
@@ -354,8 +416,10 @@ void ai_screen_render(
         message,
         message_color,
         &status_label,
-        &message_label
+        &message_label,
+        &s_view.loading_dots
     );
+    set_label_hidden(message_label, hide_message);
 
     lv_obj_t *talk_holder = lv_obj_create(container);
     lv_obj_set_size(talk_holder, AI_CONTAINER_WIDTH, AI_TALK_AREA_HEIGHT);
@@ -393,6 +457,7 @@ void ai_screen_render(
     lv_obj_add_event_cb(talk_button, talk_button_event_cb, LV_EVENT_PRESS_LOST, &s_talk_context);
 
     set_button_enabled(talk_button, talk_enabled);
+    ui_loading_dots_set_active(s_view.loading_dots, loading);
 
     s_view.body = body;
     s_view.status_label = status_label;

@@ -12,6 +12,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "runtime_diag.h"
+#include "app_settings.h"
 
 #include "stt_manager.h"
 #include "tts_manager.h"
@@ -69,6 +70,7 @@ esp_err_t app_controller_start(void)
 
     ESP_RETURN_ON_ERROR(ui_manager_init(), TAG, "Failed to initialize UI");
     ESP_RETURN_ON_ERROR(wifi_storage_init(), TAG, "Failed to initialize Wi-Fi storage");
+    ESP_RETURN_ON_ERROR(app_settings_init(), TAG, "Failed to initialize app settings");
 
     esp_err_t audio_err = audio_recorder_init();
     if (audio_err != ESP_OK) {
@@ -94,6 +96,8 @@ esp_err_t app_controller_start(void)
     ui_manager_callbacks_t callbacks = {
         .connect_another = wifi_manager_open_setup_portal,
         .close_portal = wifi_manager_close_setup_portal,
+        .wifi_enable = wifi_manager_enable,
+        .wifi_disable = wifi_manager_disable,
         .connect_saved = wifi_manager_connect_saved_network,
         .forget_saved = wifi_manager_forget_saved_network,
         .stt_press = stt_manager_press,
@@ -109,6 +113,12 @@ esp_err_t app_controller_start(void)
     ui_manager_set_callbacks(&callbacks);
 
     ESP_RETURN_ON_ERROR(wifi_manager_start(), TAG, "Failed to start Wi-Fi manager");
+
+    /* Keep the boot destination deterministic: the device starts on the app picker.
+     * Wi-Fi status updates should refresh the status bar/home state, not push a
+     * settings page over the launcher.
+     */
+    ui_manager_show_home();
 
     return ESP_OK;
 }

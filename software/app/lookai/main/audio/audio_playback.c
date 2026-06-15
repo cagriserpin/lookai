@@ -74,6 +74,8 @@ static volatile bool s_should_play_test = false;
 static volatile bool s_wav_playing = false;
 static TaskHandle_t s_test_task_handle = NULL;
 static TaskHandle_t s_stop_waiter_handle = NULL;
+static struct audio_playback_pcm_stream *s_active_pcm_stream = NULL;
+static volatile bool s_stop_current_requested = false;
 
 
 struct audio_playback_stream {
@@ -105,6 +107,7 @@ struct audio_playback_pcm_stream {
     audio_playback_stream_callback_t callback;
     void *user_ctx;
     volatile bool producer_finished;
+    volatile bool abort_requested;
     esp_err_t producer_result;
     esp_err_t playback_result;
     audio_playback_result_t result;
@@ -707,6 +710,9 @@ done:
     stream->playback_result = result;
 
     s_wav_playing = false;
+    if (s_stop_current_requested) {
+        s_stop_current_requested = false;
+    }
 
     if (stream->callback != NULL) {
         stream->callback(AUDIO_PLAYBACK_STREAM_EVENT_DONE, &stream->result, stream->user_ctx);
@@ -975,6 +981,11 @@ static void pcm_stream_playback_task(void *arg)
     }
 
     while (true) {
+        if (stream->abort_requested || s_stop_current_requested) {
+            result = ESP_ERR_INVALID_STATE;
+            break;
+        }
+
         if (xSemaphoreTake(stream->ready_sem, pdMS_TO_TICKS(100)) != pdTRUE) {
             if (stream->producer_finished) {
                 break;
@@ -992,6 +1003,11 @@ static void pcm_stream_playback_task(void *arg)
                 break;
             }
             continue;
+        }
+
+        if (stream->abort_requested || s_stop_current_requested) {
+            result = ESP_ERR_INVALID_STATE;
+            break;
         }
 
         int slot = stream->read_index % AUDIO_PLAYBACK_PCM_RING_BLOCK_COUNT;
@@ -1077,6 +1093,12 @@ static void pcm_stream_playback_task(void *arg)
     stream->playback_result = result;
 
     s_wav_playing = false;
+    if (s_active_pcm_stream == stream) {
+        s_active_pcm_stream = NULL;
+    }
+    if (stream->abort_requested || s_stop_current_requested) {
+        s_stop_current_requested = false;
+    }
 
     if (stream->callback != NULL) {
         stream->callback(AUDIO_PLAYBACK_STREAM_EVENT_DONE, &stream->result, stream->user_ctx);
@@ -1158,6 +1180,8 @@ esp_err_t audio_playback_stream_pcm_start(
     stream->metrics.block_count = AUDIO_PLAYBACK_PCM_RING_BLOCK_COUNT;
     stream->metrics.block_size = AUDIO_PLAYBACK_PCM_RING_BLOCK_SIZE;
     s_wav_playing = true;
+    s_stop_current_requested = false;
+    s_active_pcm_stream = stream;
 
     BaseType_t ok = xTaskCreate(
         pcm_stream_playback_task,
@@ -1170,6 +1194,9 @@ esp_err_t audio_playback_stream_pcm_start(
 
     if (ok != pdPASS) {
         s_wav_playing = false;
+        if (s_active_pcm_stream == stream) {
+            s_active_pcm_stream = NULL;
+        }
         vSemaphoreDelete(stream->done_sem);
         vSemaphoreDelete(stream->ready_sem);
         vSemaphoreDelete(stream->free_sem);
@@ -1197,6 +1224,10 @@ esp_err_t audio_playback_stream_pcm_write(
     size_t remaining = len;
 
     while (remaining > 0) {
+        if (stream->abort_requested || s_stop_current_requested) {
+            return ESP_ERR_INVALID_STATE;
+        }
+
         if (stream->playback_result != ESP_ERR_INVALID_STATE) {
             return stream->playback_result;
         }
@@ -1294,6 +1325,33 @@ esp_err_t audio_playback_stream_pcm_wait(
 bool audio_playback_is_test_tone_playing(void)
 {
     return s_test_task_handle != NULL;
+}
+
+esp_err_t audio_playback_stop_current(void)
+{
+    if (s_test_task_handle != NULL) {
+        return audio_playback_stop_sine_440();
+    }
+
+    audio_playback_pcm_stream_t *stream = s_active_pcm_stream;
+    if (stream != NULL) {
+        s_stop_current_requested = true;
+        stream->abort_requested = true;
+        stream->producer_result = ESP_ERR_INVALID_STATE;
+        stream->producer_finished = true;
+        for (int i = 0; i < AUDIO_PLAYBACK_PCM_RING_BLOCK_COUNT + 1; i++) {
+            xSemaphoreGive(stream->ready_sem);
+            xSemaphoreGive(stream->free_sem);
+        }
+        return ESP_OK;
+    }
+
+    if (s_wav_playing) {
+        s_stop_current_requested = true;
+        return ESP_OK;
+    }
+
+    return ESP_OK;
 }
 
 bool audio_playback_is_busy(void)

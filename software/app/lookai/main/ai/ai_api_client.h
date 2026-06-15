@@ -6,6 +6,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdbool.h>
 
 #include "esp_err.h"
 
@@ -24,6 +25,18 @@ esp_err_t ai_api_client_generate_response(
     const char *prompt,
     char *out_response,
     size_t out_response_size
+);
+
+
+/**
+ * @brief Return token usage from the most recent successful AI response.
+ *
+ * @return true when the response included usage information.
+ */
+bool ai_api_client_get_last_token_usage(
+    int *prompt_tokens,
+    int *completion_tokens,
+    int *total_tokens
 );
 
 /**

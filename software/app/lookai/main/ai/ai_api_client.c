@@ -21,6 +21,7 @@
 #include "sdkconfig.h"
 
 #include "runtime_diag.h"
+#include "app_settings.h"
 
 static const char *TAG = "ai_api_client";
 
@@ -30,6 +31,83 @@ static const char *TAG = "ai_api_client";
 #define AI_API_CLIENT_RX_BUFFER_SIZE 1024
 
 static char s_last_error[192] = "";
+static bool s_last_usage_valid = false;
+static int s_last_prompt_tokens = 0;
+static int s_last_completion_tokens = 0;
+static int s_last_total_tokens = 0;
+
+static void reset_token_usage(void)
+{
+    s_last_usage_valid = false;
+    s_last_prompt_tokens = 0;
+    s_last_completion_tokens = 0;
+    s_last_total_tokens = 0;
+}
+
+bool ai_api_client_get_last_token_usage(
+    int *prompt_tokens,
+    int *completion_tokens,
+    int *total_tokens
+)
+{
+    if (!s_last_usage_valid) {
+        return false;
+    }
+
+    if (prompt_tokens != NULL) {
+        *prompt_tokens = s_last_prompt_tokens;
+    }
+    if (completion_tokens != NULL) {
+        *completion_tokens = s_last_completion_tokens;
+    }
+    if (total_tokens != NULL) {
+        *total_tokens = s_last_total_tokens;
+    }
+
+    return true;
+}
+
+static bool json_get_int(cJSON *object, const char *name, int *out_value)
+{
+    if (object == NULL || name == NULL || out_value == NULL) {
+        return false;
+    }
+
+    cJSON *item = cJSON_GetObjectItemCaseSensitive(object, name);
+    if (!cJSON_IsNumber(item)) {
+        return false;
+    }
+
+    *out_value = item->valueint;
+    return true;
+}
+
+static void parse_token_usage(cJSON *root)
+{
+    reset_token_usage();
+
+    cJSON *usage = cJSON_GetObjectItemCaseSensitive(root, "usage");
+    if (!cJSON_IsObject(usage)) {
+        return;
+    }
+
+    bool has_prompt = json_get_int(usage, "prompt_tokens", &s_last_prompt_tokens);
+    bool has_completion = json_get_int(usage, "completion_tokens", &s_last_completion_tokens);
+    bool has_total = json_get_int(usage, "total_tokens", &s_last_total_tokens);
+
+    if (!has_prompt) {
+        has_prompt = json_get_int(usage, "input_tokens", &s_last_prompt_tokens);
+    }
+    if (!has_completion) {
+        has_completion = json_get_int(usage, "output_tokens", &s_last_completion_tokens);
+    }
+    if (!has_total && (has_prompt || has_completion)) {
+        s_last_total_tokens = s_last_prompt_tokens + s_last_completion_tokens;
+        has_total = true;
+    }
+
+    s_last_usage_valid = has_prompt || has_completion || has_total;
+}
 
 static int64_t timing_now_ms(void)
 {
@@ -250,22 +328,23 @@ static esp_err_t build_request_body(const char *prompt, char **out_body)
         max_tokens_text,
         sizeof(max_tokens_text),
         "%d",
-        CONFIG_LOOKAI_AI_MAX_TOKENS
+        app_settings_get_ai_max_tokens()
     );
     if (max_tokens_written < 0 || (size_t)max_tokens_written >= sizeof(max_tokens_text)) {
         set_last_error("Could not serialize AI max_tokens.");
         return ESP_ERR_INVALID_SIZE;
     }
 
-    const char *model = CONFIG_LOOKAI_AI_MODEL;
-    const char *system_prompt = CONFIG_LOOKAI_AI_SYSTEM_PROMPT;
+    const char *model = app_settings_get_ai_model();
+    const char *system_prompt = app_settings_get_ai_system_prompt();
 
     size_t body_size =
         160 +
         json_escaped_len(model) +
         json_escaped_len(system_prompt) +
         json_escaped_len(prompt) +
-        strlen(max_tokens_text);
+        strlen(max_tokens_text) +
+        strlen(app_settings_get_ai_temperature_json());
 
     char *body = (char *)malloc(body_size);
     if (body == NULL) {
@@ -312,7 +391,9 @@ static esp_err_t build_request_body(const char *prompt, char **out_body)
     APPEND_ESCAPED(model);
     APPEND_LITERAL("\",\"max_tokens\":");
     APPEND_TEXT(max_tokens_text);
-    APPEND_LITERAL(",\"temperature\":0.4,\"messages\":[{\"role\":\"system\",\"content\":\"");
+    APPEND_LITERAL(",\"temperature\":");
+    APPEND_TEXT(app_settings_get_ai_temperature_json());
+    APPEND_LITERAL(",\"messages\":[{\"role\":\"system\",\"content\":\"");
     APPEND_ESCAPED(system_prompt);
     APPEND_LITERAL("\"},{\"role\":\"user\",\"content\":\"");
     APPEND_ESCAPED(prompt);
@@ -404,6 +485,8 @@ static esp_err_t parse_ai_response(
         return ESP_FAIL;
     }
 
+    parse_token_usage(root);
+
     const char *content = extract_response_text(root);
     if (content == NULL || content[0] == '\0') {
         cJSON_Delete(root);
@@ -411,7 +494,7 @@ static esp_err_t parse_ai_response(
         return ESP_ERR_NOT_FOUND;
     }
 
-    size_t max_chars = (size_t)CONFIG_LOOKAI_AI_MAX_OUTPUT_CHARS;
+    size_t max_chars = (size_t)app_settings_get_ai_max_output_chars();
     if (max_chars == 0 || max_chars >= out_text_size) {
         max_chars = out_text_size - 1;
     }
@@ -452,6 +535,7 @@ esp_err_t ai_api_client_generate_response(
 
     out_response[0] = '\0';
     s_last_error[0] = '\0';
+    reset_token_usage();
     ESP_LOGI(TAG, "TIMING AI_API start total_ms=0");
 
     const char *api_key = select_api_key();
@@ -465,7 +549,7 @@ esp_err_t ai_api_client_generate_response(
         return ESP_ERR_INVALID_STATE;
     }
 
-    if (config_string_is_empty(CONFIG_LOOKAI_AI_MODEL)) {
+    if (config_string_is_empty(app_settings_get_ai_model())) {
         set_last_error("AI model is not configured.");
         return ESP_ERR_INVALID_STATE;
     }

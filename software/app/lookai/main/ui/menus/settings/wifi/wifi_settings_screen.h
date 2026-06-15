@@ -23,5 +23,18 @@ void wifi_settings_screen_render(
     const ui_manager_state_t *state,
     const ui_manager_callbacks_t *callbacks,
     lv_event_cb_t manage_saved_cb,
-    lv_event_cb_t portal_toggle_cb
+    lv_event_cb_t portal_toggle_cb,
+    lv_event_cb_t wifi_enable_cb
+);
+
+
+/**
+ * @brief Update the already-rendered Wi-Fi screen in place.
+ *
+ * @return true if the current body was updated without a full re-render.
+ */
+bool wifi_settings_screen_update(
+    lv_obj_t *body,
+    const ui_manager_state_t *state,
+    const ui_manager_callbacks_t *callbacks
 );

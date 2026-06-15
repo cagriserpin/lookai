@@ -22,6 +22,7 @@
 #include "sdkconfig.h"
 
 #include "runtime_diag.h"
+#include "app_settings.h"
 
 static const char *TAG = "stt_api_client";
 
@@ -31,6 +32,83 @@ static const char *TAG = "stt_api_client";
 #define STT_API_CLIENT_RESPONSE_MAX_BYTES 4096
 
 static char s_last_error[192] = "";
+static bool s_last_usage_valid = false;
+static int s_last_input_tokens = 0;
+static int s_last_output_tokens = 0;
+static int s_last_total_tokens = 0;
+
+static void reset_token_usage(void)
+{
+    s_last_usage_valid = false;
+    s_last_input_tokens = 0;
+    s_last_output_tokens = 0;
+    s_last_total_tokens = 0;
+}
+
+bool stt_api_client_get_last_token_usage(
+    int *input_tokens,
+    int *output_tokens,
+    int *total_tokens
+)
+{
+    if (!s_last_usage_valid) {
+        return false;
+    }
+
+    if (input_tokens != NULL) {
+        *input_tokens = s_last_input_tokens;
+    }
+    if (output_tokens != NULL) {
+        *output_tokens = s_last_output_tokens;
+    }
+    if (total_tokens != NULL) {
+        *total_tokens = s_last_total_tokens;
+    }
+
+    return true;
+}
+
+static bool json_get_int(cJSON *object, const char *name, int *out_value)
+{
+    if (object == NULL || name == NULL || out_value == NULL) {
+        return false;
+    }
+
+    cJSON *item = cJSON_GetObjectItemCaseSensitive(object, name);
+    if (!cJSON_IsNumber(item)) {
+        return false;
+    }
+
+    *out_value = item->valueint;
+    return true;
+}
+
+static void parse_token_usage(cJSON *root)
+{
+    reset_token_usage();
+
+    cJSON *usage = cJSON_GetObjectItemCaseSensitive(root, "usage");
+    if (!cJSON_IsObject(usage)) {
+        return;
+    }
+
+    bool has_input = json_get_int(usage, "input_tokens", &s_last_input_tokens);
+    bool has_output = json_get_int(usage, "output_tokens", &s_last_output_tokens);
+    bool has_total = json_get_int(usage, "total_tokens", &s_last_total_tokens);
+
+    if (!has_input) {
+        has_input = json_get_int(usage, "prompt_tokens", &s_last_input_tokens);
+    }
+    if (!has_output) {
+        has_output = json_get_int(usage, "completion_tokens", &s_last_output_tokens);
+    }
+    if (!has_total && (has_input || has_output)) {
+        s_last_total_tokens = s_last_input_tokens + s_last_output_tokens;
+        has_total = true;
+    }
+
+    s_last_usage_valid = has_input || has_output || has_total;
+}
 
 static int64_t timing_now_ms(void)
 {
@@ -232,6 +310,8 @@ static esp_err_t parse_transcript_response(
         return ESP_FAIL;
     }
 
+    parse_token_usage(root);
+
     cJSON *text = cJSON_GetObjectItemCaseSensitive(root, "text");
     if (!cJSON_IsString(text) || text->valuestring == NULL) {
         cJSON_Delete(root);
@@ -351,6 +431,7 @@ esp_err_t stt_api_client_transcribe_wav(
 
     out_text[0] = '\0';
     s_last_error[0] = '\0';
+    reset_token_usage();
     ESP_LOGI(TAG, "TIMING STT_API start total_ms=0");
 
     if (config_string_is_empty(CONFIG_LOOKAI_STT_API_KEY)) {
@@ -363,7 +444,7 @@ esp_err_t stt_api_client_transcribe_wav(
         return ESP_ERR_INVALID_STATE;
     }
 
-    if (config_string_is_empty(CONFIG_LOOKAI_STT_MODEL)) {
+    if (config_string_is_empty(app_settings_get_stt_model())) {
         set_last_error("STT model is not configured.");
         return ESP_ERR_INVALID_STATE;
     }
@@ -390,7 +471,7 @@ esp_err_t stt_api_client_transcribe_wav(
         model_part,
         sizeof(model_part),
         "model",
-        CONFIG_LOOKAI_STT_MODEL
+        app_settings_get_stt_model()
     );
 
     if (err != ESP_OK) {
@@ -398,12 +479,12 @@ esp_err_t stt_api_client_transcribe_wav(
         return err;
     }
 
-    if (!config_string_is_empty(CONFIG_LOOKAI_STT_LANGUAGE)) {
+    if (!config_string_is_empty(app_settings_get_stt_language_code())) {
         err = build_form_field(
             language_part,
             sizeof(language_part),
             "language",
-            CONFIG_LOOKAI_STT_LANGUAGE
+            app_settings_get_stt_language_code()
         );
 
         if (err != ESP_OK) {

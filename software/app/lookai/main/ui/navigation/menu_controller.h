@@ -15,13 +15,18 @@
  * @brief Identifiers for UI screens managed by the menu controller.
  */
 typedef enum {
-    MENU_SCREEN_SETTINGS = 0,       /**< Root settings screen. */
+    MENU_SCREEN_HOME = 0,           /**< Root app picker screen. */
+    MENU_SCREEN_SETTINGS,           /**< Settings hub screen. */
     MENU_SCREEN_WIFI,               /**< Wi-Fi status/settings screen. */
     MENU_SCREEN_SAVED_NETWORKS,     /**< Saved Wi-Fi networks screen. */
     MENU_SCREEN_BRIGHTNESS,         /**< Brightness settings screen. */
-    MENU_SCREEN_STT,                /**< Speech-to-text screen. */
-    MENU_SCREEN_AI,                 /**< Voice assistant screen. */
-    MENU_SCREEN_TTS,                /**< Text-to-speech screen. */
+    MENU_SCREEN_STT,                /**< Speech-to-text app screen. */
+    MENU_SCREEN_AI,                 /**< Voice assistant app screen. */
+    MENU_SCREEN_TTS,                /**< Text-to-speech app screen. */
+    MENU_SCREEN_STT_SETTINGS,       /**< STT API parameter settings screen. */
+    MENU_SCREEN_AI_SETTINGS,        /**< AI API parameter settings screen. */
+    MENU_SCREEN_TTS_SETTINGS,       /**< TTS API parameter settings screen. */
+    MENU_SCREEN_COUNT,              /**< Number of managed screens. */
 } menu_screen_t;
 
 /**

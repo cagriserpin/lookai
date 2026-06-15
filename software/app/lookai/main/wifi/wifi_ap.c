@@ -350,6 +350,41 @@ esp_err_t wifi_ap_stop_setup_ap(void)
     return ESP_OK;
 }
 
+esp_err_t wifi_ap_stop_all(void)
+{
+    if (!s_wifi_started) {
+        s_setup_ap_enabled = false;
+        s_sta_connecting = false;
+        s_sta_connected = false;
+        s_sta_ip[0] = '\0';
+        return ESP_OK;
+    }
+
+    ESP_LOGI(TAG, "Stopping Wi-Fi radio");
+
+    s_sta_reconfiguring = true;
+    s_sta_connecting = false;
+    s_sta_connected = false;
+    s_setup_ap_enabled = false;
+    s_sta_ip[0] = '\0';
+
+    esp_err_t err = esp_wifi_disconnect();
+    if (err != ESP_OK && err != ESP_ERR_WIFI_NOT_STARTED && err != ESP_ERR_WIFI_NOT_INIT) {
+        ESP_LOGW(TAG, "esp_wifi_disconnect before stop failed: %s", esp_err_to_name(err));
+    }
+
+    err = esp_wifi_stop();
+    if (err == ESP_ERR_WIFI_NOT_STARTED || err == ESP_ERR_WIFI_NOT_INIT) {
+        err = ESP_OK;
+    }
+    if (err == ESP_OK) {
+        s_wifi_started = false;
+        s_sta_reconfiguring = false;
+    }
+
+    return err;
+}
+
 static esp_err_t wifi_ap_scan_sync(wifi_ap_scan_result_t *results, uint16_t *count)
 {
     if (results == NULL || count == NULL || *count == 0) {
@@ -601,4 +636,18 @@ const char *wifi_ap_get_sta_ip(void)
 bool wifi_ap_is_sta_connected(void)
 {
     return s_sta_connected;
+}
+
+int wifi_ap_get_sta_rssi(void)
+{
+    if (!s_wifi_started || !s_sta_connected) {
+        return 0;
+    }
+
+    wifi_ap_record_t ap_info = {0};
+    if (esp_wifi_sta_get_ap_info(&ap_info) != ESP_OK) {
+        return 0;
+    }
+
+    return (int)ap_info.rssi;
 }

@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "ui_theme.h"
+#include "ui_loading_dots.h"
 #include "runtime_diag.h"
 
 #ifndef STT_TALK_FONT
@@ -48,6 +49,7 @@ typedef struct {
     lv_obj_t *status_label;
     lv_obj_t *message_label;
     lv_obj_t *talk_button;
+    lv_obj_t *loading_dots;
     lv_obj_t *test_button;
     lv_obj_t *test_label;
     lv_obj_t *play_button;
@@ -90,6 +92,19 @@ static void set_label_text_if_changed(lv_obj_t *label, const char *text)
     }
 }
 
+static void set_label_hidden(lv_obj_t *label, bool hidden)
+{
+    if (label == NULL) {
+        return;
+    }
+
+    if (hidden) {
+        lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_clear_flag(label, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
 static void talk_button_event_cb(lv_event_t *event)
 {
     lv_event_code_t code = lv_event_get_code(event);
@@ -115,6 +130,7 @@ static void talk_button_event_cb(lv_event_t *event)
         }
 
         if (context->message_label != NULL) {
+            set_label_hidden(context->message_label, false);
             lv_label_set_text(context->message_label, "Release TALK to transcribe.");
         }
 
@@ -134,6 +150,7 @@ static void talk_button_event_cb(lv_event_t *event)
         }
 
         if (context->message_label != NULL) {
+            set_label_hidden(context->message_label, false);
             lv_label_set_text(context->message_label, "Preparing recording.");
         }
 
@@ -209,7 +226,8 @@ static lv_obj_t *create_text_panel(
     const char *message,
     uint32_t message_color,
     lv_obj_t **out_status_label,
-    lv_obj_t **out_message_label
+    lv_obj_t **out_message_label,
+    lv_obj_t **out_loading_dots
 )
 {
     lv_obj_t *panel = lv_obj_create(parent);
@@ -255,12 +273,19 @@ static lv_obj_t *create_text_panel(
         LV_TEXT_ALIGN_LEFT
     );
 
+    lv_obj_t *loading_dots = ui_loading_dots_create(panel, STT_COLOR_GREEN_SOFT);
+    ui_loading_dots_set_active(loading_dots, false);
+
     if (out_status_label != NULL) {
         *out_status_label = status_label;
     }
 
     if (out_message_label != NULL) {
         *out_message_label = message_label;
+    }
+
+    if (out_loading_dots != NULL) {
+        *out_loading_dots = loading_dots;
     }
 
     return panel;
@@ -316,6 +341,7 @@ static void stt_screen_apply_dynamic_state(
     lv_obj_t *test_label,
     lv_obj_t *play_button,
     lv_obj_t *play_label,
+    lv_obj_t *loading_dots,
     const ui_manager_state_t *state,
     const ui_manager_callbacks_t *callbacks
 )
@@ -327,24 +353,34 @@ static void stt_screen_apply_dynamic_state(
 
     bool recording = false;
     bool processing = false;
+    bool wifi_connected = true;
     bool speaker_test_active = false;
     bool recording_playback_active = false;
+    bool hide_message = false;
 
     if (state != NULL) {
         status = state->stt_status[0] != '\0' ? state->stt_status : "Ready";
         result = state->stt_result;
         recording = state->stt_recording;
         processing = state->stt_processing;
+        wifi_connected = state->wifi_connected;
         speaker_test_active = state->stt_speaker_test_active;
         recording_playback_active = state->stt_recording_playback_active;
 
-        if (result != NULL && result[0] != '\0') {
+        if (!state->wifi_connected) {
+            message = "Connect Wi-Fi to use TALK.";
+            message_color = UI_COLOR_WARNING;
+        } else if (result != NULL && result[0] != '\0') {
             message = result;
             message_color = UI_COLOR_TEXT;
+        } else if (processing) {
+            message = "";
+            hide_message = true;
         }
     }
 
     bool talk_enabled =
+        wifi_connected &&
         !processing &&
         !speaker_test_active &&
         !recording_playback_active;
@@ -367,6 +403,7 @@ static void stt_screen_apply_dynamic_state(
     if (message_label != NULL) {
         set_label_text_if_changed(message_label, message);
         lv_obj_set_style_text_color(message_label, lv_color_hex(message_color), 0);
+        set_label_hidden(message_label, hide_message);
     }
 
     if (talk_button != NULL) {
@@ -392,11 +429,13 @@ static void stt_screen_apply_dynamic_state(
     }
 
     if (play_label != NULL) {
-        set_label_text_if_changed(play_label, recording_playback_active ? "Playing" : "Play");
+        set_label_text_if_changed(play_label, recording_playback_active ? "Playing" : "Play " LV_SYMBOL_PLAY);
     }
     if (play_button != NULL) {
         set_button_enabled(play_button, play_recording_enabled);
     }
+
+    ui_loading_dots_set_active(loading_dots, wifi_connected && processing);
 
     s_talk_context.callbacks = callbacks;
     s_talk_context.status_label = status_label;
@@ -427,6 +466,7 @@ bool stt_screen_update(
         s_view.test_label,
         s_view.play_button,
         s_view.play_label,
+        s_view.loading_dots,
         state,
         callbacks
     );
@@ -446,24 +486,34 @@ void stt_screen_render(
 
     bool recording = false;
     bool processing = false;
+    bool wifi_connected = true;
     bool speaker_test_active = false;
     bool recording_playback_active = false;
+    bool hide_message = false;
 
     if (state != NULL) {
         status = state->stt_status[0] != '\0' ? state->stt_status : "Ready";
         result = state->stt_result;
         recording = state->stt_recording;
         processing = state->stt_processing;
+        wifi_connected = state->wifi_connected;
         speaker_test_active = state->stt_speaker_test_active;
         recording_playback_active = state->stt_recording_playback_active;
 
-        if (result != NULL && result[0] != '\0') {
+        if (!state->wifi_connected) {
+            message = "Connect Wi-Fi to use TALK.";
+            message_color = UI_COLOR_WARNING;
+        } else if (result != NULL && result[0] != '\0') {
             message = result;
             message_color = UI_COLOR_TEXT;
+        } else if (processing) {
+            message = "";
+            hide_message = true;
         }
     }
 
     bool talk_enabled =
+        wifi_connected &&
         !processing &&
         !speaker_test_active &&
         !recording_playback_active;
@@ -509,8 +559,10 @@ void stt_screen_render(
         message,
         message_color,
         &status_label,
-        &message_label
+        &message_label,
+        &s_view.loading_dots
     );
+    set_label_hidden(message_label, hide_message);
 
     /*
      * Middle: TALK button.
@@ -582,7 +634,7 @@ void stt_screen_render(
     lv_obj_t *play_recording_label = NULL;
     lv_obj_t *play_recording_button = create_small_button(
         action_row,
-        recording_playback_active ? "Playing" : "Play",
+        recording_playback_active ? "Playing" : "Play " LV_SYMBOL_PLAY,
         STT_COLOR_BLUE,
         STT_COLOR_BLUE_DARK,
         play_recording_button_event_cb,
@@ -590,6 +642,7 @@ void stt_screen_render(
         &play_recording_label
     );
     set_button_enabled(play_recording_button, play_recording_enabled);
+    ui_loading_dots_set_active(s_view.loading_dots, wifi_connected && processing);
 
     s_view.body = body;
     s_view.status_label = status_label;

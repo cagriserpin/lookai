@@ -27,6 +27,8 @@ typedef void (*ui_manager_ssid_action_cb_t)(const char *ssid);
 typedef struct {
     ui_manager_action_cb_t connect_another;       /**< Open setup portal to add/switch Wi-Fi. */
     ui_manager_action_cb_t close_portal;          /**< Close setup portal when it is active. */
+    ui_manager_action_cb_t wifi_enable;           /**< Enable Wi-Fi radio/workflow. */
+    ui_manager_action_cb_t wifi_disable;          /**< Disable Wi-Fi radio/workflow. */
     ui_manager_ssid_action_cb_t connect_saved;    /**< Connect to a selected saved SSID. */
     ui_manager_ssid_action_cb_t forget_saved;     /**< Forget a selected saved SSID. */
     ui_manager_action_cb_t stt_press;             /**< Start push-to-talk recording flow. */
@@ -54,6 +56,9 @@ typedef struct {
     char wifi_status[64];                                                  /**< Human-readable Wi-Fi state. */
     char wifi_ssid[33];                                                    /**< Current or target SSID. */
     char wifi_ip[16];                                                      /**< Current IPv4 address. */
+    bool wifi_connected;                                                   /**< True when Wi-Fi STA has an IP. */
+    bool wifi_enabled;                                                     /**< True when Wi-Fi radio/workflow is enabled. */
+    int wifi_rssi;                                                          /**< Current STA RSSI in dBm, or 0 when unknown. */
     int saved_count;                                                       /**< Saved network count. */
     bool portal_active;                                                    /**< True when setup portal is active. */
     int brightness_percent;                                                /**< Display brightness, 10-100. */
@@ -79,6 +84,7 @@ esp_err_t ui_manager_init(void);
 
 void ui_manager_set_callbacks(const ui_manager_callbacks_t *callbacks);
 
+void ui_manager_show_home(void);
 void ui_manager_show_settings(void);
 void ui_manager_show_wifi(void);
 
@@ -87,7 +93,8 @@ void ui_manager_update_wifi_status(
     const char *ssid,
     const char *ip,
     int saved_count,
-    bool portal_active
+    bool portal_active,
+    int wifi_rssi
 );
 
 void ui_manager_set_saved_networks(

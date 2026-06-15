@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "ui_card.h"
+#include "ui_loading_dots.h"
 #include "ui_theme.h"
 #include "runtime_diag.h"
 
@@ -24,6 +25,7 @@ typedef struct {
     lv_obj_t *status_label;
     lv_obj_t *sample_1;
     lv_obj_t *sample_2;
+    lv_obj_t *loading_dots;
 } tts_screen_view_t;
 
 static tts_screen_view_t s_view = {0};
@@ -162,7 +164,9 @@ static lv_obj_t *create_sample_card(
     }
 
     lv_obj_t *label = lv_label_create(card);
-    lv_label_set_text(label, text != NULL ? text : "");
+    char label_text[160];
+    snprintf(label_text, sizeof(label_text), "%s " LV_SYMBOL_PLAY, text != NULL ? text : "");
+    lv_label_set_text(label, label_text);
     lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(label, UI_THEME_CARD_INNER_WIDTH);
     lv_obj_set_style_text_color(label, lv_color_hex(UI_COLOR_TEXT), 0);
@@ -192,16 +196,23 @@ bool tts_screen_update(
     const char *status = "Ready";
     const char *result = "Select a sample text.";
     bool busy = false;
+    bool wifi_connected = true;
 
     if (state != NULL) {
         status = state->tts_status[0] != '\0' ? state->tts_status : "Ready";
         result = state->tts_result;
         busy = state->tts_busy;
+        wifi_connected = state->wifi_connected;
+    }
+
+    if (!wifi_connected) {
+        result = "Connect Wi-Fi to generate speech.";
     }
 
     update_status_label(s_view.status_label, status, result);
-    set_card_enabled(s_view.sample_1, !busy);
-    set_card_enabled(s_view.sample_2, !busy);
+    ui_loading_dots_set_active(s_view.loading_dots, wifi_connected && busy);
+    set_card_enabled(s_view.sample_1, wifi_connected && !busy);
+    set_card_enabled(s_view.sample_2, wifi_connected && !busy);
 
     return true;
 }
@@ -215,11 +226,17 @@ void tts_screen_render(
     const char *status = "Ready";
     const char *result = "Select a sample text.";
     bool busy = false;
+    bool wifi_connected = true;
 
     if (state != NULL) {
         status = state->tts_status[0] != '\0' ? state->tts_status : "Ready";
         result = state->tts_result;
         busy = state->tts_busy;
+        wifi_connected = state->wifi_connected;
+    }
+
+    if (!wifi_connected) {
+        result = "Connect Wi-Fi to generate speech.";
     }
 
     /*
@@ -243,6 +260,8 @@ void tts_screen_render(
     lv_obj_set_style_pad_gap(container, 18, 0);
 
     lv_obj_t *status_label = create_status_label(container, status, result);
+    lv_obj_t *loading_dots = ui_loading_dots_create(container, TTS_COLOR_PURPLE);
+    ui_loading_dots_set_active(loading_dots, wifi_connected && busy);
 
     lv_obj_t *sample_1 = create_sample_card(
         container,
@@ -258,11 +277,12 @@ void tts_screen_render(
         callbacks
     );
 
-    set_card_enabled(sample_1, !busy);
-    set_card_enabled(sample_2, !busy);
+    set_card_enabled(sample_1, wifi_connected && !busy);
+    set_card_enabled(sample_2, wifi_connected && !busy);
 
     s_view.body = body;
     s_view.status_label = status_label;
     s_view.sample_1 = sample_1;
     s_view.sample_2 = sample_2;
+    s_view.loading_dots = loading_dots;
 }

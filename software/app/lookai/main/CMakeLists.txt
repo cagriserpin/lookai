@@ -5,6 +5,7 @@ idf_component_register(
         "app/app_controller.c"
 
         "system/runtime_diag.c"
+        "system/app_settings.c"
 
         "ai/ai_manager.c"
         "ai/ai_api_client.c"
@@ -38,9 +39,11 @@ idf_component_register(
         "ui/items/ui_card.c"
         "ui/items/ui_label.c"
         "ui/items/ui_settings_item.c"
+        "ui/items/ui_loading_dots.c"
 
         "ui/scaffold/ui_scaffold.c"
 
+        "ui/menus/home/home_screen.c"
         "ui/menus/settings/settings_screen.c"
         "ui/menus/settings/wifi/wifi_settings_screen.c"
         "ui/menus/settings/wifi/manage_networks_screen.c"
@@ -48,6 +51,7 @@ idf_component_register(
         "ui/menus/settings/ai/ai_screen.c"
         "ui/menus/settings/stt/stt_screen.c"
         "ui/menus/settings/tts/tts_screen.c"
+        "ui/menus/settings/api/api_settings_screen.c"
     INCLUDE_DIRS
         "."
         "app"
@@ -63,12 +67,14 @@ idf_component_register(
         "ui/navigation"
         "ui/items"
         "ui/scaffold"
+        "ui/menus/home"
         "ui/menus/settings"
         "ui/menus/settings/brightness"
         "ui/menus/settings/wifi"
         "ui/menus/settings/ai"
         "ui/menus/settings/stt"
         "ui/menus/settings/tts"
+        "ui/menus/settings/api"
     REQUIRES
         esp_common
         esp_wifi

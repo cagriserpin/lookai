@@ -64,6 +64,11 @@ esp_err_t wifi_ap_start_sta_only(void);
 esp_err_t wifi_ap_stop_setup_ap(void);
 
 /**
+ * @brief Stop all Wi-Fi operation and clear STA/AP runtime state.
+ */
+esp_err_t wifi_ap_stop_all(void);
+
+/**
  * @brief Start an asynchronous Wi-Fi scan.
  */
 esp_err_t wifi_ap_scan_refresh_async(void);
@@ -117,6 +122,11 @@ const char *wifi_ap_get_sta_ip(void);
  * @brief Return whether STA is connected.
  */
 bool wifi_ap_is_sta_connected(void);
+
+/**
+ * @brief Get current STA RSSI in dBm, or 0 when unavailable.
+ */
+int wifi_ap_get_sta_rssi(void);
 
 /**
  * @brief Log current STA link/IP state for diagnostics.

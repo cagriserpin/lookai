@@ -33,6 +33,16 @@ void wifi_manager_open_setup_portal(void);
 void wifi_manager_close_setup_portal(void);
 
 /**
+ * @brief Enable the Wi-Fi workflow after the user turns Wi-Fi on.
+ */
+void wifi_manager_enable(void);
+
+/**
+ * @brief Disable Wi-Fi radio/setup workflow by user request.
+ */
+void wifi_manager_disable(void);
+
+/**
  * @brief Connect to an already saved network.
  *
  * @param ssid Saved SSID to connect to.

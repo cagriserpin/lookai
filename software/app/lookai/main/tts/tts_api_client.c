@@ -5,6 +5,7 @@
 
 #include "tts_api_client.h"
 #include "runtime_diag.h"
+#include "app_settings.h"
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -79,7 +80,7 @@ static const char *select_api_key(void)
 
 static bool tts_model_supports_instructions(void)
 {
-    return strcmp(CONFIG_LOOKAI_TTS_MODEL, "gpt-4o-mini-tts") == 0;
+    return strcmp(app_settings_get_tts_model(), "gpt-4o-mini-tts") == 0;
 }
 
 static size_t json_escaped_len(const char *text)
@@ -178,16 +179,16 @@ static esp_err_t build_request_body_with_format(const char *text, const char *re
         return ESP_ERR_INVALID_SIZE;
     }
 
-    const char *instructions =
-        "Turkceyi dogal, net ve sicak bir tonda konus. Cumleleri sakin ve anlasilir oku.";
+    const char *instructions = app_settings_get_tts_instructions();
     bool include_instructions = tts_model_supports_instructions();
 
     size_t body_size =
         128 +
-        json_escaped_len(CONFIG_LOOKAI_TTS_MODEL) +
-        json_escaped_len(CONFIG_LOOKAI_TTS_VOICE) +
+        json_escaped_len(app_settings_get_tts_model()) +
+        json_escaped_len(app_settings_get_tts_voice()) +
         json_escaped_len(text) +
         json_escaped_len(response_format) +
+        strlen(app_settings_get_tts_speed_json()) +
         (include_instructions ? json_escaped_len(instructions) + 32 : 0);
 
     char *body = (char *)malloc(body_size);
@@ -219,15 +220,28 @@ static esp_err_t build_request_body_with_format(const char *text, const char *re
         } \
     } while (0)
 
+#define APPEND_TEXT(text_value) do { \
+        const char *_text = (text_value); \
+        const size_t _len = strlen(_text); \
+        if ((size_t)(end - cursor) <= _len) { \
+            free(body); \
+            set_last_error("TTS request JSON buffer was too small."); \
+            return ESP_ERR_INVALID_SIZE; \
+        } \
+        memcpy(cursor, _text, _len); \
+        cursor += _len; \
+    } while (0)
+
     APPEND_LITERAL("{\"model\":\"");
-    APPEND_ESCAPED(CONFIG_LOOKAI_TTS_MODEL);
+    APPEND_ESCAPED(app_settings_get_tts_model());
     APPEND_LITERAL("\",\"voice\":\"");
-    APPEND_ESCAPED(CONFIG_LOOKAI_TTS_VOICE);
+    APPEND_ESCAPED(app_settings_get_tts_voice());
     APPEND_LITERAL("\",\"input\":\"");
     APPEND_ESCAPED(text);
     APPEND_LITERAL("\",\"response_format\":\"");
     APPEND_ESCAPED(response_format);
-    APPEND_LITERAL("\"");
+    APPEND_LITERAL("\",\"speed\":");
+    APPEND_TEXT(app_settings_get_tts_speed_json());
 
     if (include_instructions) {
         APPEND_LITERAL(",\"instructions\":\"");
@@ -239,6 +253,7 @@ static esp_err_t build_request_body_with_format(const char *text, const char *re
 
 #undef APPEND_LITERAL
 #undef APPEND_ESCAPED
+#undef APPEND_TEXT
 
     *cursor = '\0';
     *out_body = body;
@@ -819,12 +834,12 @@ esp_err_t tts_api_client_generate_wav(
         return ESP_ERR_INVALID_STATE;
     }
 
-    if (config_string_is_empty(CONFIG_LOOKAI_TTS_MODEL)) {
+    if (config_string_is_empty(app_settings_get_tts_model())) {
         set_last_error("TTS model is not configured.");
         return ESP_ERR_INVALID_STATE;
     }
 
-    if (config_string_is_empty(CONFIG_LOOKAI_TTS_VOICE)) {
+    if (config_string_is_empty(app_settings_get_tts_voice())) {
         set_last_error("TTS voice is not configured.");
         return ESP_ERR_INVALID_STATE;
     }
@@ -992,12 +1007,12 @@ esp_err_t tts_api_client_generate_wav_streaming(
         return ESP_ERR_INVALID_STATE;
     }
 
-    if (config_string_is_empty(CONFIG_LOOKAI_TTS_MODEL)) {
+    if (config_string_is_empty(app_settings_get_tts_model())) {
         set_last_error("TTS model is not configured.");
         return ESP_ERR_INVALID_STATE;
     }
 
-    if (config_string_is_empty(CONFIG_LOOKAI_TTS_VOICE)) {
+    if (config_string_is_empty(app_settings_get_tts_voice())) {
         set_last_error("TTS voice is not configured.");
         return ESP_ERR_INVALID_STATE;
     }
@@ -1171,12 +1186,12 @@ esp_err_t tts_api_client_generate_pcm_streaming(
         return ESP_ERR_INVALID_STATE;
     }
 
-    if (config_string_is_empty(CONFIG_LOOKAI_TTS_MODEL)) {
+    if (config_string_is_empty(app_settings_get_tts_model())) {
         set_last_error("TTS model is not configured.");
         return ESP_ERR_INVALID_STATE;
     }
 
-    if (config_string_is_empty(CONFIG_LOOKAI_TTS_VOICE)) {
+    if (config_string_is_empty(app_settings_get_tts_voice())) {
         set_last_error("TTS voice is not configured.");
         return ESP_ERR_INVALID_STATE;
     }
