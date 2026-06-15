@@ -11,8 +11,8 @@
 #include "ui_loading_dots.h"
 #include "ui_theme.h"
 
-#ifndef AI_TALK_FONT
-#define AI_TALK_FONT (&lv_font_montserrat_28)
+#ifndef AI_BOOT_FONT
+#define AI_BOOT_FONT (&lv_font_montserrat_28)
 #endif
 
 #define AI_COLOR_CYAN 0x38BDF8
@@ -22,8 +22,8 @@
 #define AI_CONTAINER_WIDTH UI_THEME_CARD_WIDTH
 #define AI_CONTAINER_HEIGHT 330
 
-#define AI_TALK_AREA_HEIGHT 130
-#define AI_TALK_BUTTON_SIZE 112
+#define AI_BOOT_AREA_HEIGHT 130
+#define AI_BOOT_BUTTON_SIZE 112
 
 #define AI_TEXT_PANEL_WIDTH UI_THEME_CARD_WIDTH
 #define AI_TEXT_PANEL_HEIGHT 170
@@ -122,7 +122,7 @@ static void talk_button_event_cb(lv_event_t *event)
 
         if (context->message_label != NULL) {
             set_label_hidden(context->message_label, false);
-            lv_label_set_text(context->message_label, "Release TALK to ask AI.");
+            lv_label_set_text(context->message_label, "Release BOOT to ask AI.");
         }
 
         if (context->callbacks != NULL && context->callbacks->ai_press != NULL) {
@@ -261,7 +261,7 @@ static void ai_screen_apply_dynamic_state(
 {
     const char *status = "Ready";
     const char *result = "";
-    const char *message = "Hold TALK to ask AI.";
+    const char *message = "Hold BOOT to ask AI.";
     uint32_t message_color = UI_COLOR_MUTED;
 
     bool recording = false;
@@ -321,6 +321,48 @@ static void ai_screen_apply_dynamic_state(
     s_talk_context.status_label = status_label;
     s_talk_context.message_label = message_label;
 }
+
+void ai_screen_set_hardware_talk_pressed(
+    lv_obj_t *body,
+    bool pressed,
+    const ui_manager_state_t *state
+)
+{
+    if (
+        body == NULL ||
+        s_view.body != body ||
+        s_view.status_label == NULL ||
+        s_view.message_label == NULL ||
+        s_view.talk_button == NULL
+    ) {
+        return;
+    }
+
+    if (pressed) {
+        if (state != NULL && !state->wifi_connected) {
+            return;
+        }
+
+        lv_obj_add_state(s_view.talk_button, LV_STATE_PRESSED);
+        lv_obj_set_style_bg_color(s_view.talk_button, lv_color_hex(AI_COLOR_CYAN_DARK), 0);
+        set_label_text_if_changed(s_view.status_label, "Recording");
+        set_label_hidden(s_view.message_label, false);
+        set_label_text_if_changed(s_view.message_label, "Release BOOT to ask AI.");
+        return;
+    }
+
+    lv_obj_clear_state(s_view.talk_button, LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(s_view.talk_button, lv_color_hex(AI_COLOR_CYAN), 0);
+
+    if (state != NULL && !state->ai_recording) {
+        return;
+    }
+
+    set_label_text_if_changed(s_view.status_label, "Saving");
+    set_label_hidden(s_view.message_label, false);
+    set_label_text_if_changed(s_view.message_label, "Preparing recording.");
+}
+
 bool ai_screen_update(
     lv_obj_t *body,
     const ui_manager_state_t *state,
@@ -356,7 +398,7 @@ void ai_screen_render(
 {
     const char *status = "Ready";
     const char *result = "";
-    const char *message = "Hold TALK to ask AI.";
+    const char *message = "Hold BOOT to ask AI.";
     uint32_t message_color = UI_COLOR_MUTED;
 
     bool recording = false;
@@ -422,13 +464,13 @@ void ai_screen_render(
     set_label_hidden(message_label, hide_message);
 
     lv_obj_t *talk_holder = lv_obj_create(container);
-    lv_obj_set_size(talk_holder, AI_CONTAINER_WIDTH, AI_TALK_AREA_HEIGHT);
+    lv_obj_set_size(talk_holder, AI_CONTAINER_WIDTH, AI_BOOT_AREA_HEIGHT);
     style_plain_container(talk_holder);
 
     lv_obj_t *talk_button = lv_button_create(talk_holder);
 
-    lv_obj_set_size(talk_button, AI_TALK_BUTTON_SIZE, AI_TALK_BUTTON_SIZE);
-    lv_obj_set_style_radius(talk_button, AI_TALK_BUTTON_SIZE / 2, 0);
+    lv_obj_set_size(talk_button, AI_BOOT_BUTTON_SIZE, AI_BOOT_BUTTON_SIZE);
+    lv_obj_set_style_radius(talk_button, AI_BOOT_BUTTON_SIZE / 2, 0);
     lv_obj_set_style_bg_color(talk_button, lv_color_hex(AI_COLOR_CYAN), 0);
     lv_obj_set_style_bg_color(talk_button, lv_color_hex(AI_COLOR_CYAN_DARK), LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(talk_button, LV_OPA_COVER, 0);
@@ -443,7 +485,7 @@ void ai_screen_render(
 
     lv_obj_t *talk_label = lv_label_create(talk_button);
     lv_label_set_text(talk_label, "TALK");
-    lv_obj_set_style_text_font(talk_label, AI_TALK_FONT, 0);
+    lv_obj_set_style_text_font(talk_label, AI_BOOT_FONT, 0);
     lv_obj_set_style_text_color(talk_label, lv_color_hex(UI_COLOR_TEXT), 0);
     lv_obj_set_style_text_align(talk_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_center(talk_label);

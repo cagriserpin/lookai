@@ -13,12 +13,12 @@
 esp_err_t stt_manager_start(void);
 
 /**
- * @brief Notify the STT backend that TALK was pressed.
+ * @brief Notify the STT backend that BOOT was pressed.
  */
 void stt_manager_press(void);
 
 /**
- * @brief Notify the STT backend that TALK was released.
+ * @brief Notify the STT backend that BOOT was released.
  */
 void stt_manager_release(void);
 

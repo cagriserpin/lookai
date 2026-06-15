@@ -87,7 +87,7 @@ static int64_t timing_since_ms(int64_t start_ms)
  * Temporary states must not overwrite this cache.
  */
 static char s_stable_status[64] = "Ready";
-static char s_stable_result[STT_TRANSCRIPT_BUFFER_SIZE] = "Hold TALK to record.";
+static char s_stable_result[STT_TRANSCRIPT_BUFFER_SIZE] = "Hold BOOT to record.";
 
 static void copy_tr_ascii_text(
     const char *input,
@@ -301,7 +301,7 @@ static void build_stt_result_with_tokens(
     snprintf(
         token_line,
         sizeof(token_line),
-        "\n(STT: in %d / out %d)",
+        " (%d/%d tokens used)",
         input_tokens,
         output_tokens
     );
@@ -439,7 +439,7 @@ static void transcribe_task(void *arg)
 static void handle_press(void)
 {
     if (is_busy_for_new_action()) {
-        ESP_LOGI(TAG, "Ignoring TALK press while STT/audio is busy");
+        ESP_LOGI(TAG, "Ignoring BOOT press while STT/audio is busy");
         return;
     }
 
@@ -448,7 +448,7 @@ static void handle_press(void)
     s_stt_audio_ready_ms = 0;
     s_stt_api_task_start_ms = 0;
 
-    ESP_LOGI(TAG, "TALK pressed");
+    ESP_LOGI(TAG, "BOOT pressed");
     ESP_LOGI(TAG, "TIMING STT record_start total_ms=0");
     runtime_diag_log("stt_press_begin");
 
@@ -551,7 +551,7 @@ static void handle_release(void)
 
     s_stt_release_ms = timing_now_ms();
 
-    ESP_LOGI(TAG, "TALK released");
+    ESP_LOGI(TAG, "BOOT released");
     ESP_LOGI(
         TAG,
         "TIMING STT record_release held_ms=%lld total_ms=%lld",
@@ -780,7 +780,7 @@ static void stt_task(void *arg)
 
     stt_manager_event_t event;
 
-    show_stable_status("Ready", "Hold TALK to record.");
+    show_stable_status("Ready", "Hold BOOT to record.");
 
     while (true) {
         if (xQueueReceive(s_stt_event_queue, &event, portMAX_DELAY) != pdTRUE) {

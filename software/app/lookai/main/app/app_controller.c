@@ -8,6 +8,7 @@
 #include "ai_manager.h"
 #include "audio_playback.h"
 #include "audio_recorder.h"
+#include "board_buttons.h"
 #include "esp_check.h"
 #include "esp_err.h"
 #include "esp_log.h"
@@ -68,9 +69,9 @@ esp_err_t app_controller_start(void)
         ESP_LOGW(TAG, "Task stack report not started: %s", esp_err_to_name(diag_err));
     }
 
-    ESP_RETURN_ON_ERROR(ui_manager_init(), TAG, "Failed to initialize UI");
     ESP_RETURN_ON_ERROR(wifi_storage_init(), TAG, "Failed to initialize Wi-Fi storage");
     ESP_RETURN_ON_ERROR(app_settings_init(), TAG, "Failed to initialize app settings");
+    ESP_RETURN_ON_ERROR(ui_manager_init(), TAG, "Failed to initialize UI");
 
     esp_err_t audio_err = audio_recorder_init();
     if (audio_err != ESP_OK) {
@@ -111,6 +112,13 @@ esp_err_t app_controller_start(void)
     };
 
     ui_manager_set_callbacks(&callbacks);
+
+    board_buttons_callbacks_t button_callbacks = {
+        .boot_press = ui_manager_handle_boot_press,
+        .boot_release = ui_manager_handle_boot_release,
+        .pwr_press = ui_manager_show_volume_popup,
+    };
+    ESP_RETURN_ON_ERROR(board_buttons_start(&button_callbacks), TAG, "Failed to start board buttons");
 
     ESP_RETURN_ON_ERROR(wifi_manager_start(), TAG, "Failed to start Wi-Fi manager");
 

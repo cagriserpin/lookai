@@ -13,11 +13,11 @@
 esp_err_t ai_manager_start(void);
 
 /**
- * @brief Notify the AI backend that TALK was pressed.
+ * @brief Notify the AI backend that BOOT was pressed.
  */
 void ai_manager_press(void);
 
 /**
- * @brief Notify the AI backend that TALK was released.
+ * @brief Notify the AI backend that BOOT was released.
  */
 void ai_manager_release(void);

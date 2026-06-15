@@ -15,6 +15,7 @@ void settings_screen_render(
     const ui_manager_callbacks_t *callbacks,
     lv_event_cb_t wifi_button_cb,
     lv_event_cb_t brightness_button_cb,
+    lv_event_cb_t volume_button_cb,
     lv_event_cb_t stt_button_cb,
     lv_event_cb_t ai_button_cb,
     lv_event_cb_t tts_button_cb

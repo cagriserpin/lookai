@@ -31,7 +31,7 @@ static const char *TAG = "audio_playback";
 #define AUDIO_PLAYBACK_TEST_BITS_PER_SAMPLE 16
 
 #define AUDIO_PLAYBACK_PA_CTRL_GPIO GPIO_NUM_46
-#define AUDIO_PLAYBACK_VOLUME 100
+#define AUDIO_PLAYBACK_DEFAULT_VOLUME 80
 
 #define AUDIO_PLAYBACK_TASK_STACK_SIZE 4096
 #define AUDIO_PLAYBACK_TASK_PRIORITY 5
@@ -69,6 +69,8 @@ static const int16_t s_sine_440_lut[SINE_440_LUT_COUNT] = {
 
 static esp_codec_dev_handle_t s_speaker_dev = NULL;
 static bool s_ready = false;
+static bool s_speaker_open = false;
+static uint8_t s_volume_percent = AUDIO_PLAYBACK_DEFAULT_VOLUME;
 
 static volatile bool s_should_play_test = false;
 static volatile bool s_wav_playing = false;
@@ -149,6 +151,34 @@ static uint32_t bytes_to_duration_ms(
     return (uint32_t)(((uint64_t)pcm_bytes * 1000ULL) / bytes_per_second);
 }
 
+static uint8_t clamp_volume_percent(uint8_t volume_percent)
+{
+    return volume_percent > 100 ? 100 : volume_percent;
+}
+
+esp_err_t audio_playback_set_volume(uint8_t volume_percent)
+{
+    s_volume_percent = clamp_volume_percent(volume_percent);
+
+    if (s_speaker_dev == NULL || !s_speaker_open) {
+        return ESP_OK;
+    }
+
+    int codec_ret = esp_codec_dev_set_out_vol(s_speaker_dev, s_volume_percent);
+    if (codec_ret != 0) {
+        ESP_LOGW(TAG, "Failed to set speaker volume to %u%%: %d",
+                 (unsigned int)s_volume_percent, codec_ret);
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
+
+uint8_t audio_playback_get_volume(void)
+{
+    return s_volume_percent;
+}
+
 static esp_err_t set_power_amplifier_enabled(bool enabled)
 {
     static bool configured = false;
@@ -212,7 +242,9 @@ static esp_err_t open_speaker_codec(
         return ESP_FAIL;
     }
 
-    codec_ret = esp_codec_dev_set_out_vol(s_speaker_dev, AUDIO_PLAYBACK_VOLUME);
+    s_speaker_open = true;
+
+    codec_ret = esp_codec_dev_set_out_vol(s_speaker_dev, s_volume_percent);
     if (codec_ret != 0) {
         ESP_LOGW(TAG, "Failed to set speaker volume: %d", codec_ret);
     }
@@ -222,6 +254,7 @@ static esp_err_t open_speaker_codec(
 
 static void close_speaker_codec(void)
 {
+    s_speaker_open = false;
     int codec_ret = esp_codec_dev_close(s_speaker_dev);
     if (codec_ret != 0) {
         ESP_LOGW(TAG, "Failed to close speaker codec cleanly: %d", codec_ret);

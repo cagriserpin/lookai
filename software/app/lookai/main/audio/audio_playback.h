@@ -62,6 +62,16 @@ typedef void (*audio_playback_stream_callback_t)(
 esp_err_t audio_playback_init(void);
 
 /**
+ * @brief Set speaker output volume as 0-100 percent.
+ */
+esp_err_t audio_playback_set_volume(uint8_t volume_percent);
+
+/**
+ * @brief Get the currently requested speaker output volume.
+ */
+uint8_t audio_playback_get_volume(void);
+
+/**
  * @brief Start looping a 16 kHz mono 16-bit ~444 Hz sine LUT.
  *
  * The loop continues until audio_playback_stop_sine_440() is called.

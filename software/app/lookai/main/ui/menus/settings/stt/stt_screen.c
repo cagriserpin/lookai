@@ -11,8 +11,8 @@
 #include "ui_loading_dots.h"
 #include "runtime_diag.h"
 
-#ifndef STT_TALK_FONT
-#define STT_TALK_FONT (&lv_font_montserrat_28)
+#ifndef STT_BOOT_FONT
+#define STT_BOOT_FONT (&lv_font_montserrat_28)
 #endif
 
 #define STT_COLOR_GREEN 0x22C55E
@@ -26,8 +26,8 @@
 #define STT_CONTAINER_WIDTH UI_THEME_CARD_WIDTH
 #define STT_CONTAINER_HEIGHT 330
 
-#define STT_TALK_AREA_HEIGHT 110
-#define STT_TALK_BUTTON_SIZE 102
+#define STT_BOOT_AREA_HEIGHT 110
+#define STT_BOOT_BUTTON_SIZE 102
 
 #define STT_TEXT_PANEL_WIDTH UI_THEME_CARD_WIDTH
 #define STT_TEXT_PANEL_HEIGHT 150
@@ -131,7 +131,7 @@ static void talk_button_event_cb(lv_event_t *event)
 
         if (context->message_label != NULL) {
             set_label_hidden(context->message_label, false);
-            lv_label_set_text(context->message_label, "Release TALK to transcribe.");
+            lv_label_set_text(context->message_label, "Release BOOT to transcribe.");
         }
 
         if (context->callbacks != NULL && context->callbacks->stt_press != NULL) {
@@ -348,7 +348,7 @@ static void stt_screen_apply_dynamic_state(
 {
     const char *status = "Ready";
     const char *result = "";
-    const char *message = "Hold TALK to record.";
+    const char *message = "Hold BOOT to record.";
     uint32_t message_color = UI_COLOR_MUTED;
 
     bool recording = false;
@@ -368,7 +368,7 @@ static void stt_screen_apply_dynamic_state(
         recording_playback_active = state->stt_recording_playback_active;
 
         if (!state->wifi_connected) {
-            message = "Connect Wi-Fi to use TALK.";
+            message = "Connect Wi-Fi to use BOOT.";
             message_color = UI_COLOR_WARNING;
         } else if (result != NULL && result[0] != '\0') {
             message = result;
@@ -442,6 +442,57 @@ static void stt_screen_apply_dynamic_state(
     s_talk_context.message_label = message_label;
 }
 
+
+void stt_screen_set_hardware_talk_pressed(
+    lv_obj_t *body,
+    bool pressed,
+    const ui_manager_state_t *state
+)
+{
+    if (
+        body == NULL ||
+        s_view.body != body ||
+        s_view.status_label == NULL ||
+        s_view.message_label == NULL ||
+        s_view.talk_button == NULL
+    ) {
+        return;
+    }
+
+    if (pressed) {
+        bool can_start = true;
+        if (state != NULL) {
+            can_start =
+                state->wifi_connected &&
+                !state->stt_processing &&
+                !state->stt_speaker_test_active &&
+                !state->stt_recording_playback_active;
+        }
+
+        if (!can_start) {
+            return;
+        }
+
+        lv_obj_add_state(s_view.talk_button, LV_STATE_PRESSED);
+        lv_obj_set_style_bg_color(s_view.talk_button, lv_color_hex(STT_COLOR_GREEN_DARK), 0);
+        set_label_text_if_changed(s_view.status_label, "Recording");
+        set_label_hidden(s_view.message_label, false);
+        set_label_text_if_changed(s_view.message_label, "Release BOOT to transcribe.");
+        return;
+    }
+
+    lv_obj_clear_state(s_view.talk_button, LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(s_view.talk_button, lv_color_hex(STT_COLOR_GREEN), 0);
+
+    if (state != NULL && !state->stt_recording) {
+        return;
+    }
+
+    set_label_text_if_changed(s_view.status_label, "Saving");
+    set_label_hidden(s_view.message_label, false);
+    set_label_text_if_changed(s_view.message_label, "Preparing recording.");
+}
+
 bool stt_screen_update(
     lv_obj_t *body,
     const ui_manager_state_t *state,
@@ -481,7 +532,7 @@ void stt_screen_render(
 {
     const char *status = "Ready";
     const char *result = "";
-    const char *message = "Hold TALK to record.";
+    const char *message = "Hold BOOT to record.";
     uint32_t message_color = UI_COLOR_MUTED;
 
     bool recording = false;
@@ -501,7 +552,7 @@ void stt_screen_render(
         recording_playback_active = state->stt_recording_playback_active;
 
         if (!state->wifi_connected) {
-            message = "Connect Wi-Fi to use TALK.";
+            message = "Connect Wi-Fi to use BOOT.";
             message_color = UI_COLOR_WARNING;
         } else if (result != NULL && result[0] != '\0') {
             message = result;
@@ -565,16 +616,16 @@ void stt_screen_render(
     set_label_hidden(message_label, hide_message);
 
     /*
-     * Middle: TALK button.
+     * Middle: BOOT button.
      */
     lv_obj_t *talk_holder = lv_obj_create(container);
-    lv_obj_set_size(talk_holder, STT_CONTAINER_WIDTH, STT_TALK_AREA_HEIGHT);
+    lv_obj_set_size(talk_holder, STT_CONTAINER_WIDTH, STT_BOOT_AREA_HEIGHT);
     style_plain_container(talk_holder);
 
     lv_obj_t *talk_button = lv_button_create(talk_holder);
 
-    lv_obj_set_size(talk_button, STT_TALK_BUTTON_SIZE, STT_TALK_BUTTON_SIZE);
-    lv_obj_set_style_radius(talk_button, STT_TALK_BUTTON_SIZE / 2, 0);
+    lv_obj_set_size(talk_button, STT_BOOT_BUTTON_SIZE, STT_BOOT_BUTTON_SIZE);
+    lv_obj_set_style_radius(talk_button, STT_BOOT_BUTTON_SIZE / 2, 0);
     lv_obj_set_style_bg_color(talk_button, lv_color_hex(STT_COLOR_GREEN), 0);
     lv_obj_set_style_bg_color(talk_button, lv_color_hex(STT_COLOR_GREEN_DARK), LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(talk_button, LV_OPA_COVER, 0);
@@ -589,7 +640,7 @@ void stt_screen_render(
 
     lv_obj_t *talk_label = lv_label_create(talk_button);
     lv_label_set_text(talk_label, "TALK");
-    lv_obj_set_style_text_font(talk_label, STT_TALK_FONT, 0);
+    lv_obj_set_style_text_font(talk_label, STT_BOOT_FONT, 0);
     lv_obj_set_style_text_color(talk_label, lv_color_hex(UI_COLOR_TEXT), 0);
     lv_obj_set_style_text_align(talk_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_center(talk_label);

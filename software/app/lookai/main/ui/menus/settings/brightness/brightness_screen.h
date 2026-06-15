@@ -12,5 +12,5 @@
 void brightness_screen_render(
     lv_obj_t *body,
     const ui_manager_state_t *state,
-    lv_event_cb_t slider_changed_cb
+    lv_event_cb_t brightness_slider_changed_cb
 );

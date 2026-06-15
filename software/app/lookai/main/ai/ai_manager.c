@@ -204,40 +204,56 @@ static void build_conversation_display(
     char *buffer,
     size_t buffer_size,
     const char *transcript,
-    const char *response
+    const char *stt_token_text,
+    const char *response,
+    const char *ai_token_text
 )
 {
     if (buffer == NULL || buffer_size == 0) {
         return;
     }
 
-    if (transcript != NULL && transcript[0] != '\0' && response != NULL && response[0] != '\0') {
-        snprintf(buffer, buffer_size, "You: %s\nAI: %s", transcript, response);
-    } else if (transcript != NULL && transcript[0] != '\0') {
-        snprintf(buffer, buffer_size, "You: %s", transcript);
+    bool has_transcript = transcript != NULL && transcript[0] != '\0';
+    bool has_stt_tokens = stt_token_text != NULL && stt_token_text[0] != '\0';
+    bool has_response = response != NULL && response[0] != '\0';
+    bool has_ai_tokens = ai_token_text != NULL && ai_token_text[0] != '\0';
+
+    if (has_transcript && has_response) {
+        snprintf(
+            buffer,
+            buffer_size,
+            "You: %s%s%s\nAI: %s%s%s",
+            transcript,
+            has_stt_tokens ? " " : "",
+            has_stt_tokens ? stt_token_text : "",
+            response,
+            has_ai_tokens ? "\n" : "",
+            has_ai_tokens ? ai_token_text : ""
+        );
+    } else if (has_transcript) {
+        snprintf(
+            buffer,
+            buffer_size,
+            "You: %s%s%s",
+            transcript,
+            has_stt_tokens ? " " : "",
+            has_stt_tokens ? stt_token_text : ""
+        );
+    } else if (has_response) {
+        snprintf(
+            buffer,
+            buffer_size,
+            "AI: %s%s%s",
+            response,
+            has_ai_tokens ? "\n" : "",
+            has_ai_tokens ? ai_token_text : ""
+        );
     } else {
-        snprintf(buffer, buffer_size, "%s", response != NULL ? response : "");
+        buffer[0] = '\0';
     }
 }
 
-static void append_display_line(char *buffer, size_t buffer_size, const char *line)
-{
-    if (buffer == NULL || buffer_size == 0 || line == NULL || line[0] == '\0') {
-        return;
-    }
-
-    size_t len = strlen(buffer);
-    if (len >= buffer_size - 1) {
-        return;
-    }
-
-    snprintf(buffer + len, buffer_size - len, "%s%s", len > 0 ? "\n" : "", line);
-}
-
-static bool build_stt_token_line(
-    char *out,
-    size_t out_size
-)
+static bool build_stt_token_text(char *out, size_t out_size)
 {
     if (out == NULL || out_size == 0) {
         return false;
@@ -253,64 +269,42 @@ static bool build_stt_token_line(
         &output_tokens,
         &total_tokens
     );
-    (void)total_tokens;
 
     if (!has_usage) {
         return false;
     }
 
-    snprintf(
-        out,
-        out_size,
-        "(STT: in %d / out %d)",
-        input_tokens,
-        output_tokens
-    );
+    (void)total_tokens;
+
+    snprintf(out, out_size, "(%d/%d tokens used)", input_tokens, output_tokens);
     return true;
 }
 
-static void build_final_token_line(
-    char *out,
-    size_t out_size,
-    const char *stt_token_line
-)
+static bool build_ai_token_text(char *out, size_t out_size)
 {
     if (out == NULL || out_size == 0) {
-        return;
+        return false;
     }
 
     out[0] = '\0';
 
     int prompt_tokens = 0;
     int completion_tokens = 0;
-    int ai_total_tokens = 0;
-    bool has_ai_usage = ai_api_client_get_last_token_usage(
+    int total_tokens = 0;
+    bool has_usage = ai_api_client_get_last_token_usage(
         &prompt_tokens,
         &completion_tokens,
-        &ai_total_tokens
+        &total_tokens
     );
-    (void)ai_total_tokens;
 
-    bool has_stt_usage = stt_token_line != NULL && stt_token_line[0] != '\0';
-
-    char ai_token_line[64] = {0};
-    if (has_ai_usage) {
-        snprintf(
-            ai_token_line,
-            sizeof(ai_token_line),
-            "(AI: in %d / out %d)",
-            prompt_tokens,
-            completion_tokens
-        );
+    if (!has_usage) {
+        return false;
     }
 
-    if (has_stt_usage && has_ai_usage) {
-        snprintf(out, out_size, "%s %s", stt_token_line, ai_token_line);
-    } else if (has_stt_usage) {
-        snprintf(out, out_size, "%s", stt_token_line);
-    } else if (has_ai_usage) {
-        snprintf(out, out_size, "%s", ai_token_line);
-    }
+    (void)total_tokens;
+
+    snprintf(out, out_size, "(%d/%d tokens used)", prompt_tokens, completion_tokens);
+    return true;
 }
 
 static void set_error_message(const char *status, const char *message)
@@ -410,8 +404,8 @@ static void flow_task(void *arg)
 
     char transcript_raw[AI_TRANSCRIPT_BUFFER_SIZE] = {0};
     char response_raw[AI_RESPONSE_BUFFER_SIZE] = {0};
-    char stt_token_line[96] = {0};
-    char final_token_line[128] = {0};
+    char stt_token_text[64] = {0};
+    char ai_token_text[64] = {0};
 
     s_ai_flow_task_start_ms = timing_now_ms();
     ESP_LOGI(
@@ -473,9 +467,15 @@ static void flow_task(void *arg)
     }
 
     snprintf(s_transcript, sizeof(s_transcript), "%s", transcript_raw);
-    (void)build_stt_token_line(stt_token_line, sizeof(stt_token_line));
-    build_conversation_display(s_display_text, sizeof(s_display_text), s_transcript, NULL);
-    append_display_line(s_display_text, sizeof(s_display_text), stt_token_line);
+    (void)build_stt_token_text(stt_token_text, sizeof(stt_token_text));
+    build_conversation_display(
+        s_display_text,
+        sizeof(s_display_text),
+        s_transcript,
+        stt_token_text,
+        NULL,
+        NULL
+    );
 
     s_state = AI_MANAGER_STATE_THINKING;
     update_ai_ui("Thinking", s_display_text, false, true, false);
@@ -511,13 +511,15 @@ static void flow_task(void *arg)
     }
 
     snprintf(s_response, sizeof(s_response), "%s", response_raw);
-    build_conversation_display(s_display_text, sizeof(s_display_text), s_transcript, s_response);
-    build_final_token_line(
-        final_token_line,
-        sizeof(final_token_line),
-        stt_token_line
+    (void)build_ai_token_text(ai_token_text, sizeof(ai_token_text));
+    build_conversation_display(
+        s_display_text,
+        sizeof(s_display_text),
+        s_transcript,
+        stt_token_text,
+        s_response,
+        ai_token_text
     );
-    append_display_line(s_display_text, sizeof(s_display_text), final_token_line);
 
     if (!flow_is_current(generation)) {
         goto stale_done;
@@ -627,7 +629,7 @@ static void cancel_current_activity_for_restart(void)
 static void handle_press(void)
 {
     if (!wifi_manager_is_connected()) {
-        ESP_LOGI(TAG, "Ignoring AI TALK press because Wi-Fi is not connected");
+        ESP_LOGI(TAG, "Ignoring AI BOOT press because Wi-Fi is not connected");
         update_ai_ui("No Wi-Fi", "Connect Wi-Fi to ask AI.", false, false, false);
         return;
     }
@@ -644,7 +646,7 @@ static void handle_press(void)
     s_ai_flow_task_start_ms = 0;
     s_ai_playback_start_ms = 0;
 
-    ESP_LOGI(TAG, "AI TALK pressed");
+    ESP_LOGI(TAG, "AI BOOT pressed");
     ESP_LOGI(TAG, "TIMING AI record_start total_ms=0");
     runtime_diag_log("ai_press_begin");
 
@@ -714,13 +716,13 @@ static void start_flow_for_path(const char *path)
 static void handle_release(void)
 {
     if (s_state != AI_MANAGER_STATE_RECORDING) {
-        ESP_LOGI(TAG, "Ignoring AI TALK release because AI is not recording");
+        ESP_LOGI(TAG, "Ignoring AI BOOT release because AI is not recording");
         return;
     }
 
     s_ai_release_ms = timing_now_ms();
 
-    ESP_LOGI(TAG, "AI TALK released");
+    ESP_LOGI(TAG, "AI BOOT released");
     ESP_LOGI(
         TAG,
         "TIMING AI record_release held_ms=%lld total_ms=%lld",
@@ -812,7 +814,7 @@ static void ai_task(void *arg)
 
     ai_manager_event_t event;
 
-    update_ai_ui("Ready", "Hold TALK to ask AI.", false, false, false);
+    update_ai_ui("Ready", "Hold BOOT to ask AI.", false, false, false);
 
     while (true) {
         if (xQueueReceive(s_ai_event_queue, &event, portMAX_DELAY) != pdTRUE) {

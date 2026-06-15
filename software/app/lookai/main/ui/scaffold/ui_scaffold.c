@@ -514,6 +514,11 @@ static void create_title_icon(lv_obj_t *top, ui_scaffold_title_icon_t title_icon
             icon_font = UI_TITLE_CUSTOM_ICON_FONT;
             break;
 
+        case UI_SCAFFOLD_TITLE_ICON_VOLUME:
+            icon_text = "VOL";
+            icon_font = UI_TITLE_TEXT_ICON_FONT;
+            break;
+
         case UI_SCAFFOLD_TITLE_ICON_STT:
             icon_text = "STT";
             icon_font = UI_TITLE_TEXT_ICON_FONT;

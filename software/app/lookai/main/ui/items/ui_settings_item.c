@@ -36,7 +36,7 @@ static void create_text_icon(lv_obj_t *icon_circle, const char *text)
     lv_label_set_text_static(icon, text != NULL ? text : "");
     const bool small_text_icon =
         text != NULL &&
-        (strcmp(text, "AI") == 0 || strcmp(text, "STT") == 0 || strcmp(text, "TTS") == 0);
+        (strcmp(text, "AI") == 0 || strcmp(text, "STT") == 0 || strcmp(text, "TTS") == 0 || strcmp(text, "VOL") == 0);
     lv_obj_set_style_text_font(icon, small_text_icon ? UI_SETTINGS_ITEM_TEXT_ICON_FONT : UI_SETTINGS_ITEM_ICON_FONT, 0);
     lv_obj_set_style_text_color(icon, lv_color_hex(UI_COLOR_TEXT), 0);
     lv_obj_center(icon);

@@ -20,6 +20,7 @@ typedef enum {
     MENU_SCREEN_WIFI,               /**< Wi-Fi status/settings screen. */
     MENU_SCREEN_SAVED_NETWORKS,     /**< Saved Wi-Fi networks screen. */
     MENU_SCREEN_BRIGHTNESS,         /**< Brightness settings screen. */
+    MENU_SCREEN_VOLUME,             /**< Volume settings screen. */
     MENU_SCREEN_STT,                /**< Speech-to-text app screen. */
     MENU_SCREEN_AI,                 /**< Voice assistant app screen. */
     MENU_SCREEN_TTS,                /**< Text-to-speech app screen. */

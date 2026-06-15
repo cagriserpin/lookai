@@ -62,6 +62,7 @@ typedef struct {
     int saved_count;                                                       /**< Saved network count. */
     bool portal_active;                                                    /**< True when setup portal is active. */
     int brightness_percent;                                                /**< Display brightness, 10-100. */
+    int volume_percent;                                                    /**< Speaker volume, 0-100. */
     char stt_status[64];                                                   /**< Speech-to-text state label. */
     char stt_result[256];                                                  /**< Latest speech-to-text result text. */
     bool stt_recording;                                                    /**< True while push-to-talk is pressed. */
@@ -124,3 +125,18 @@ void ui_manager_update_ai_status(
     bool busy,
     bool speaking
 );
+
+/**
+ * @brief Show the touch volume popup from a hardware PWR button press.
+ */
+void ui_manager_show_volume_popup(void);
+
+/**
+ * @brief Route the hardware BOOT press to the visible push-to-talk screen.
+ */
+void ui_manager_handle_boot_press(void);
+
+/**
+ * @brief Route the hardware BOOT release to the visible push-to-talk screen.
+ */
+void ui_manager_handle_boot_release(void);

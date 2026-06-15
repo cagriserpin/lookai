@@ -4,6 +4,8 @@ idf_component_register(
 
         "app/app_controller.c"
 
+        "input/board_buttons.c"
+
         "system/runtime_diag.c"
         "system/app_settings.c"
 
@@ -48,6 +50,7 @@ idf_component_register(
         "ui/menus/settings/wifi/wifi_settings_screen.c"
         "ui/menus/settings/wifi/manage_networks_screen.c"
         "ui/menus/settings/brightness/brightness_screen.c"
+        "ui/menus/settings/volume/volume_screen.c"
         "ui/menus/settings/ai/ai_screen.c"
         "ui/menus/settings/stt/stt_screen.c"
         "ui/menus/settings/tts/tts_screen.c"
@@ -55,6 +58,7 @@ idf_component_register(
     INCLUDE_DIRS
         "."
         "app"
+        "input"
         "system"
         "ai"
         "stt"
@@ -70,6 +74,7 @@ idf_component_register(
         "ui/menus/home"
         "ui/menus/settings"
         "ui/menus/settings/brightness"
+        "ui/menus/settings/volume"
         "ui/menus/settings/wifi"
         "ui/menus/settings/ai"
         "ui/menus/settings/stt"
@@ -84,6 +89,7 @@ idf_component_register(
         esp_http_server
         lwip
         esp_codec_dev
+        esp_io_expander
         driver
         spiffs
         json

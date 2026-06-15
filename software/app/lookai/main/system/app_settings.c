@@ -19,7 +19,8 @@ static const char *TAG = "app_settings";
 
 #define APP_SETTINGS_NAMESPACE "lookai_cfg"
 #define APP_SETTINGS_KEY_BLOB  "settings"
-#define APP_SETTINGS_VERSION   5
+#define APP_SETTINGS_VERSION      6
+#define APP_SETTINGS_PREV_VERSION 5
 
 typedef struct {
     uint32_t version;
@@ -29,6 +30,17 @@ typedef struct {
     uint8_t ai_temperature;
     uint8_t tts_voice;
     uint16_t tts_speed_percent;
+} app_settings_nvs_blob_v5_t;
+
+typedef struct {
+    uint32_t version;
+    uint8_t stt_language;
+    uint8_t stt_model;
+    uint8_t ai_style;
+    uint8_t ai_temperature;
+    uint8_t tts_voice;
+    uint16_t tts_speed_percent;
+    uint8_t volume_percent;
 } app_settings_nvs_blob_t;
 
 typedef struct {
@@ -92,6 +104,7 @@ static lookai_runtime_settings_t s_settings = {
     .ai_temperature = LOOKAI_AI_TEMPERATURE_NORMAL,
     .tts_voice = LOOKAI_TTS_VOICE_MARIN,
     .tts_speed_percent = 100,
+    .volume_percent = 80,
 };
 
 static bool is_initialized = false;
@@ -130,6 +143,9 @@ static void clamp_settings(void)
     if (s_settings.tts_speed_percent < 50 || s_settings.tts_speed_percent > 200) {
         s_settings.tts_speed_percent = 100;
     }
+    if (s_settings.volume_percent > 100) {
+        s_settings.volume_percent = 80;
+    }
 }
 
 static esp_err_t save_settings(void)
@@ -149,6 +165,7 @@ static esp_err_t save_settings(void)
         .ai_temperature = (uint8_t)s_settings.ai_temperature,
         .tts_voice = (uint8_t)s_settings.tts_voice,
         .tts_speed_percent = s_settings.tts_speed_percent,
+        .volume_percent = s_settings.volume_percent,
     };
 
     err = nvs_set_blob(handle, APP_SETTINGS_KEY_BLOB, &blob, sizeof(blob));
@@ -188,20 +205,36 @@ static esp_err_t load_settings(void)
         return err;
     }
 
-    if (size != sizeof(blob) || blob.version != APP_SETTINGS_VERSION) {
-        ESP_LOGW(TAG, "Ignoring incompatible settings blob");
+    if (size == sizeof(blob) && blob.version == APP_SETTINGS_VERSION) {
+        s_settings.stt_language = (lookai_stt_language_t)blob.stt_language;
+        s_settings.stt_model = (lookai_stt_model_t)blob.stt_model;
+        s_settings.ai_style = (lookai_ai_style_t)blob.ai_style;
+        s_settings.ai_temperature = (lookai_ai_temperature_t)blob.ai_temperature;
+        s_settings.tts_voice = (lookai_tts_voice_t)blob.tts_voice;
+        s_settings.tts_speed_percent = blob.tts_speed_percent;
+        s_settings.volume_percent = blob.volume_percent;
+        clamp_settings();
+        return ESP_OK;
+    }
+
+    if (size == sizeof(app_settings_nvs_blob_v5_t) && blob.version == APP_SETTINGS_PREV_VERSION) {
+        app_settings_nvs_blob_v5_t old_blob = {0};
+        memcpy(&old_blob, &blob, sizeof(old_blob));
+
+        s_settings.stt_language = (lookai_stt_language_t)old_blob.stt_language;
+        s_settings.stt_model = (lookai_stt_model_t)old_blob.stt_model;
+        s_settings.ai_style = (lookai_ai_style_t)old_blob.ai_style;
+        s_settings.ai_temperature = (lookai_ai_temperature_t)old_blob.ai_temperature;
+        s_settings.tts_voice = (lookai_tts_voice_t)old_blob.tts_voice;
+        s_settings.tts_speed_percent = old_blob.tts_speed_percent;
+        s_settings.volume_percent = 80;
+        clamp_settings();
+        ESP_LOGI(TAG, "Migrating settings blob to version %d", APP_SETTINGS_VERSION);
         return ESP_ERR_INVALID_VERSION;
     }
 
-    s_settings.stt_language = (lookai_stt_language_t)blob.stt_language;
-    s_settings.stt_model = (lookai_stt_model_t)blob.stt_model;
-    s_settings.ai_style = (lookai_ai_style_t)blob.ai_style;
-    s_settings.ai_temperature = (lookai_ai_temperature_t)blob.ai_temperature;
-    s_settings.tts_voice = (lookai_tts_voice_t)blob.tts_voice;
-    s_settings.tts_speed_percent = blob.tts_speed_percent;
-    clamp_settings();
-
-    return ESP_OK;
+    ESP_LOGW(TAG, "Ignoring incompatible settings blob");
+    return ESP_ERR_INVALID_VERSION;
 }
 
 esp_err_t app_settings_init(void)
@@ -371,6 +404,11 @@ uint16_t app_settings_get_tts_speed_percent(void)
     return s_settings.tts_speed_percent;
 }
 
+uint8_t app_settings_get_volume_percent(void)
+{
+    return s_settings.volume_percent;
+}
+
 const char *app_settings_get_tts_instructions(void)
 {
     if (s_settings.tts_speed_percent < 90) {
@@ -451,6 +489,16 @@ esp_err_t app_settings_set_tts_speed_percent(uint16_t speed_percent)
         speed_percent = 200;
     }
     s_settings.tts_speed_percent = speed_percent;
+    return save_settings();
+}
+
+esp_err_t app_settings_set_volume_percent(uint8_t volume_percent)
+{
+    if (volume_percent > 100) {
+        volume_percent = 100;
+    }
+
+    s_settings.volume_percent = volume_percent;
     return save_settings();
 }
 

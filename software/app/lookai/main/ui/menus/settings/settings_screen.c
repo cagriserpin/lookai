@@ -27,6 +27,7 @@ void settings_screen_render(
     const ui_manager_callbacks_t *callbacks,
     lv_event_cb_t wifi_button_cb,
     lv_event_cb_t brightness_button_cb,
+    lv_event_cb_t volume_button_cb,
     lv_event_cb_t stt_button_cb,
     lv_event_cb_t ai_button_cb,
     lv_event_cb_t tts_button_cb
@@ -45,6 +46,12 @@ void settings_screen_render(
         .type = UI_SETTINGS_ITEM_ICON_SUN,
         .text = NULL,
         .color = UI_COLOR_BRIGHTNESS_ORANGE,
+    };
+
+    const ui_settings_item_icon_t volume_icon = {
+        .type = UI_SETTINGS_ITEM_ICON_TEXT,
+        .text = "VOL",
+        .color = UI_COLOR_AI_CYAN,
     };
 
     const ui_settings_item_icon_t ai_icon = {
@@ -80,6 +87,14 @@ void settings_screen_render(
         &brightness_icon,
         "Brightness",
         brightness_button_cb,
+        NULL
+    );
+
+    ui_settings_item_create(
+        body,
+        &volume_icon,
+        "Volume",
+        volume_button_cb,
         NULL
     );
 

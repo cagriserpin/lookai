@@ -92,6 +92,7 @@ typedef struct {
     lookai_ai_temperature_t ai_temperature;
     lookai_tts_voice_t tts_voice;
     uint16_t tts_speed_percent;
+    uint8_t volume_percent;
 } lookai_runtime_settings_t;
 
 esp_err_t app_settings_init(void);
@@ -124,6 +125,7 @@ const char *app_settings_get_ai_temperature_dropdown_options(void);
 const char *app_settings_get_tts_voice_dropdown_options(void);
 const char *app_settings_get_tts_speed_dropdown_options(void);
 uint16_t app_settings_get_tts_speed_percent(void);
+uint8_t app_settings_get_volume_percent(void);
 
 int app_settings_get_stt_language_index(void);
 int app_settings_get_stt_model_index(void);
@@ -139,6 +141,7 @@ esp_err_t app_settings_set_ai_temperature_index(int index);
 esp_err_t app_settings_set_tts_voice_index(int index);
 esp_err_t app_settings_set_tts_speed_index(int index);
 esp_err_t app_settings_set_tts_speed_percent(uint16_t speed_percent);
+esp_err_t app_settings_set_volume_percent(uint8_t volume_percent);
 
 esp_err_t app_settings_cycle_stt_language(int step);
 esp_err_t app_settings_cycle_stt_model(int step);

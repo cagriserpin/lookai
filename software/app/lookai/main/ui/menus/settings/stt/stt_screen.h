@@ -32,3 +32,13 @@ bool stt_screen_update(
     const ui_manager_state_t *state,
     const ui_manager_callbacks_t *callbacks
 );
+
+
+/**
+ * @brief Update the visible TALK button as if it were held by hardware BOOT.
+ */
+void stt_screen_set_hardware_talk_pressed(
+    lv_obj_t *body,
+    bool pressed,
+    const ui_manager_state_t *state
+);

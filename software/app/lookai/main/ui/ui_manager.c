@@ -7,6 +7,7 @@
 
 #include "runtime_diag.h"
 #include "app_settings.h"
+#include "audio_playback.h"
 
 #include <stdio.h>
 #include <stdint.h>
@@ -24,6 +25,7 @@
 #include "ai_screen.h"
 #include "api/api_settings_screen.h"
 #include "brightness/brightness_screen.h"
+#include "volume/volume_screen.h"
 #include "wifi/manage_networks_screen.h"
 #include "menu_controller.h"
 #include "settings_screen.h"
@@ -60,6 +62,19 @@ static uint8_t s_deferred_refresh_flags = 0;
 #define UI_REFRESH_BODY 0x02U
 #define UI_REFRESH_FULL 0x04U
 
+#define VOLUME_POPUP_WIDTH 244
+#define VOLUME_POPUP_HEIGHT 118
+#define VOLUME_POPUP_BOTTOM_OFFSET 20
+#define VOLUME_POPUP_PAD 14
+#define VOLUME_POPUP_SLIDER_KNOB_SIZE 30
+#define VOLUME_POPUP_SLIDER_EXT_CLICK_AREA 38
+#define VOLUME_POPUP_HIDE_MS 3000
+
+static lv_obj_t *s_volume_popup_overlay = NULL;
+static lv_obj_t *s_volume_popup_panel = NULL;
+static lv_obj_t *s_volume_popup_value_label = NULL;
+static lv_timer_t *s_volume_popup_timer = NULL;
+
 typedef struct {
     bool active;
     int64_t start_us;
@@ -84,6 +99,7 @@ static ui_manager_state_t s_state = {
     .saved_count = 0,
     .portal_active = false,
     .brightness_percent = 100,
+    .volume_percent = 80,
     .stt_status = "Ready",
     .stt_result = "",
     .stt_recording = false,
@@ -91,7 +107,7 @@ static ui_manager_state_t s_state = {
     .stt_speaker_test_active = false,
     .stt_recording_playback_active = false,
     .ai_status = "Ready",
-    .ai_result = "Hold TALK to ask AI.",
+    .ai_result = "Hold BOOT to ask AI.",
     .ai_recording = false,
     .ai_busy = false,
     .ai_speaking = false,
@@ -199,6 +215,9 @@ static const char *screen_to_name(menu_screen_t screen)
         case MENU_SCREEN_BRIGHTNESS:
             return "brightness";
 
+        case MENU_SCREEN_VOLUME:
+            return "volume";
+
         case MENU_SCREEN_STT:
             return "stt";
 
@@ -236,6 +255,9 @@ static const char *get_current_title(void)
 
         case MENU_SCREEN_BRIGHTNESS:
             return "Brightness";
+
+        case MENU_SCREEN_VOLUME:
+            return "Volume";
 
         case MENU_SCREEN_STT:
             return "Speech to Text";
@@ -279,6 +301,9 @@ static ui_scaffold_title_icon_t get_current_title_icon(void)
 
         case MENU_SCREEN_BRIGHTNESS:
             return UI_SCAFFOLD_TITLE_ICON_BRIGHTNESS;
+
+        case MENU_SCREEN_VOLUME:
+            return UI_SCAFFOLD_TITLE_ICON_VOLUME;
 
         case MENU_SCREEN_STT:
             return UI_SCAFFOLD_TITLE_ICON_STT;
@@ -326,6 +351,115 @@ static void apply_display_brightness(int brightness_percent)
     }
 }
 
+static int clamp_volume_percent(int volume_percent)
+{
+    if (volume_percent < 0) {
+        return 0;
+    }
+
+    if (volume_percent > 100) {
+        return 100;
+    }
+
+    return volume_percent;
+}
+
+static void update_volume_value_label(lv_obj_t *value_label, int volume_percent)
+{
+    if (value_label == NULL) {
+        return;
+    }
+
+    char value_text[16];
+    snprintf(value_text, sizeof(value_text), "%d%%", clamp_volume_percent(volume_percent));
+    lv_label_set_text(value_label, value_text);
+}
+
+static void apply_audio_volume(int volume_percent)
+{
+    volume_percent = clamp_volume_percent(volume_percent);
+    s_state.volume_percent = volume_percent;
+
+    esp_err_t settings_err = app_settings_set_volume_percent((uint8_t)volume_percent);
+    if (settings_err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to save volume %d%%: %s", volume_percent, esp_err_to_name(settings_err));
+    }
+
+    esp_err_t audio_err = audio_playback_set_volume((uint8_t)volume_percent);
+    if (audio_err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to apply volume %d%%: %s", volume_percent, esp_err_to_name(audio_err));
+    }
+}
+
+static void volume_popup_destroy_unlocked(void)
+{
+    if (s_volume_popup_timer != NULL) {
+        lv_timer_del(s_volume_popup_timer);
+        s_volume_popup_timer = NULL;
+    }
+
+    if (s_volume_popup_overlay != NULL) {
+        lv_obj_delete(s_volume_popup_overlay);
+    }
+
+    s_volume_popup_overlay = NULL;
+    s_volume_popup_panel = NULL;
+    s_volume_popup_value_label = NULL;
+}
+
+static void volume_popup_timer_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    s_volume_popup_timer = NULL;
+    volume_popup_destroy_unlocked();
+}
+
+static void volume_popup_restart_timer_unlocked(void)
+{
+    if (s_volume_popup_timer != NULL) {
+        lv_timer_del(s_volume_popup_timer);
+        s_volume_popup_timer = NULL;
+    }
+
+    s_volume_popup_timer = lv_timer_create(volume_popup_timer_cb, VOLUME_POPUP_HIDE_MS, NULL);
+    if (s_volume_popup_timer != NULL) {
+        lv_timer_set_repeat_count(s_volume_popup_timer, 1);
+    }
+}
+
+static void volume_popup_translate_y_anim_cb(void *object, int32_t value)
+{
+    lv_obj_set_style_translate_y((lv_obj_t *)object, value, 0);
+}
+
+static void volume_popup_overlay_event_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED) {
+        return;
+    }
+
+    if (lv_event_get_target(event) == s_volume_popup_overlay) {
+        volume_popup_destroy_unlocked();
+    }
+}
+
+static void volume_popup_slider_event_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) {
+        return;
+    }
+
+    lv_obj_t *slider = (lv_obj_t *)lv_event_get_target(event);
+    if (slider == NULL) {
+        return;
+    }
+
+    int value = (int)lv_slider_get_value(slider);
+    apply_audio_volume(value);
+    update_volume_value_label(s_volume_popup_value_label, value);
+    volume_popup_restart_timer_unlocked();
+}
+
 
 static void home_stt_event_cb(lv_event_t *event)
 {
@@ -370,6 +504,14 @@ static void brightness_button_event_cb(lv_event_t *event)
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
         runtime_diag_log("button_settings_brightness_clicked");
         menu_controller_push(&s_menu, MENU_SCREEN_BRIGHTNESS);
+    }
+}
+
+static void volume_button_event_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        runtime_diag_log("button_settings_volume_clicked");
+        menu_controller_push(&s_menu, MENU_SCREEN_VOLUME);
     }
 }
 
@@ -436,6 +578,20 @@ static void brightness_slider_event_cb(lv_event_t *event)
         snprintf(value_text, sizeof(value_text), "%ld%%", (long)value);
         lv_label_set_text(value_label, value_text);
     }
+}
+
+static void volume_slider_event_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) {
+        return;
+    }
+
+    lv_obj_t *slider = (lv_obj_t *)lv_event_get_target(event);
+    lv_obj_t *value_label = (lv_obj_t *)lv_event_get_user_data(event);
+
+    int32_t value = lv_slider_get_value(slider);
+    apply_audio_volume((int)value);
+    update_volume_value_label(value_label, (int)value);
 }
 
 
@@ -744,6 +900,7 @@ static void render_body_unlocked(lv_obj_t *body)
             &s_callbacks,
             wifi_button_event_cb,
             brightness_button_event_cb,
+            volume_button_event_cb,
             stt_button_event_cb,
             ai_button_event_cb,
             tts_button_event_cb
@@ -768,6 +925,14 @@ static void render_body_unlocked(lv_obj_t *body)
             brightness_slider_event_cb
         );
         runtime_diag_log_duration("ui_render_brightness_screen", screen_start_us);
+    } else if (screen_id == MENU_SCREEN_VOLUME) {
+        int64_t screen_start_us = runtime_diag_now_us();
+        volume_screen_render(
+            body,
+            &s_state,
+            volume_slider_event_cb
+        );
+        runtime_diag_log_duration("ui_render_volume_screen", screen_start_us);
     } else if (screen_id == MENU_SCREEN_STT) {
         int64_t screen_start_us = runtime_diag_now_us();
         stt_screen_render(
@@ -1042,6 +1207,9 @@ esp_err_t ui_manager_init(void)
         return ESP_FAIL;
     }
 
+    s_state.volume_percent = app_settings_get_volume_percent();
+    audio_playback_set_volume((uint8_t)s_state.volume_percent);
+
     int64_t brightness_start_us = runtime_diag_now_us();
     apply_display_brightness(s_state.brightness_percent);
     runtime_diag_log_duration("ui_apply_initial_brightness", brightness_start_us);
@@ -1123,6 +1291,147 @@ void ui_manager_show_wifi(void)
     menu_controller_push(&s_menu, MENU_SCREEN_WIFI);
 
     bsp_display_unlock();
+}
+
+void ui_manager_show_volume_popup(void)
+{
+    if (bsp_display_lock(1000) != ESP_OK) {
+        return;
+    }
+
+    volume_popup_destroy_unlocked();
+
+    s_volume_popup_overlay = lv_obj_create(lv_layer_top());
+    if (s_volume_popup_overlay == NULL) {
+        bsp_display_unlock();
+        return;
+    }
+
+    lv_obj_set_size(s_volume_popup_overlay, UI_THEME_SCREEN_WIDTH, UI_THEME_SCREEN_HEIGHT);
+    lv_obj_set_pos(s_volume_popup_overlay, 0, 0);
+    lv_obj_set_style_bg_color(s_volume_popup_overlay, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(s_volume_popup_overlay, LV_OPA_50, 0);
+    lv_obj_set_style_border_width(s_volume_popup_overlay, 0, 0);
+    lv_obj_set_style_radius(s_volume_popup_overlay, 0, 0);
+    lv_obj_set_style_pad_all(s_volume_popup_overlay, 0, 0);
+    lv_obj_clear_flag(s_volume_popup_overlay, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(s_volume_popup_overlay, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_volume_popup_overlay, volume_popup_overlay_event_cb, LV_EVENT_CLICKED, NULL);
+
+    s_volume_popup_panel = lv_obj_create(s_volume_popup_overlay);
+    lv_obj_set_size(s_volume_popup_panel, VOLUME_POPUP_WIDTH, VOLUME_POPUP_HEIGHT);
+    lv_obj_align(s_volume_popup_panel, LV_ALIGN_BOTTOM_MID, 0, -VOLUME_POPUP_BOTTOM_OFFSET);
+    lv_obj_set_style_bg_color(s_volume_popup_panel, lv_color_hex(UI_COLOR_CARD), 0);
+    lv_obj_set_style_bg_opa(s_volume_popup_panel, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(s_volume_popup_panel, lv_color_hex(UI_COLOR_AI_CYAN), 0);
+    lv_obj_set_style_border_width(s_volume_popup_panel, 2, 0);
+    lv_obj_set_style_radius(s_volume_popup_panel, 22, 0);
+    lv_obj_set_style_pad_all(s_volume_popup_panel, VOLUME_POPUP_PAD, 0);
+    lv_obj_set_style_pad_gap(s_volume_popup_panel, 8, 0);
+    lv_obj_set_flex_flow(s_volume_popup_panel, LV_FLEX_FLOW_COLUMN);
+    lv_obj_clear_flag(s_volume_popup_panel, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *row = lv_obj_create(s_volume_popup_panel);
+    lv_obj_set_width(row, VOLUME_POPUP_WIDTH - (VOLUME_POPUP_PAD * 2));
+    lv_obj_set_height(row, 24);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_all(row, 0, 0);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *title = lv_label_create(row);
+    lv_label_set_text_static(title, "Volume");
+    lv_obj_set_style_text_color(title, lv_color_hex(UI_COLOR_TEXT), 0);
+
+    s_volume_popup_value_label = lv_label_create(row);
+    lv_obj_set_style_text_color(s_volume_popup_value_label, lv_color_hex(UI_COLOR_AI_CYAN), 0);
+    update_volume_value_label(s_volume_popup_value_label, s_state.volume_percent);
+
+    lv_obj_t *slider = lv_slider_create(s_volume_popup_panel);
+    lv_obj_set_width(slider, VOLUME_POPUP_WIDTH - (VOLUME_POPUP_PAD * 2));
+    lv_obj_set_height(slider, 34);
+    lv_slider_set_range(slider, 0, 100);
+    lv_slider_set_value(slider, s_state.volume_percent, LV_ANIM_OFF);
+    lv_obj_set_style_radius(slider, 12, LV_PART_MAIN);
+    lv_obj_set_style_radius(slider, 12, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(slider, lv_color_hex(UI_COLOR_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(slider, lv_color_hex(UI_COLOR_AI_CYAN), LV_PART_INDICATOR);
+    lv_obj_set_style_width(slider, VOLUME_POPUP_SLIDER_KNOB_SIZE, LV_PART_KNOB);
+    lv_obj_set_style_height(slider, VOLUME_POPUP_SLIDER_KNOB_SIZE, LV_PART_KNOB);
+    lv_obj_set_style_radius(slider, VOLUME_POPUP_SLIDER_KNOB_SIZE / 2, LV_PART_KNOB);
+    lv_obj_set_style_bg_color(slider, lv_color_hex(UI_COLOR_TEXT), LV_PART_KNOB);
+    lv_obj_set_style_border_color(slider, lv_color_hex(UI_COLOR_AI_CYAN), LV_PART_KNOB);
+    lv_obj_set_style_border_width(slider, 2, LV_PART_KNOB);
+    lv_obj_set_ext_click_area(slider, VOLUME_POPUP_SLIDER_EXT_CLICK_AREA);
+    lv_obj_add_event_cb(slider, volume_popup_slider_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_update_layout(s_volume_popup_panel);
+    lv_obj_set_style_translate_y(s_volume_popup_panel, VOLUME_POPUP_HEIGHT + VOLUME_POPUP_BOTTOM_OFFSET, 0);
+
+    lv_anim_t anim;
+    lv_anim_init(&anim);
+    lv_anim_set_var(&anim, s_volume_popup_panel);
+    lv_anim_set_exec_cb(&anim, volume_popup_translate_y_anim_cb);
+    lv_anim_set_values(&anim, VOLUME_POPUP_HEIGHT + VOLUME_POPUP_BOTTOM_OFFSET, 0);
+    lv_anim_set_time(&anim, 180);
+    lv_anim_set_path_cb(&anim, lv_anim_path_ease_out);
+    lv_anim_start(&anim);
+
+    volume_popup_restart_timer_unlocked();
+
+    bsp_display_unlock();
+}
+
+void ui_manager_handle_boot_press(void)
+{
+    menu_screen_t current = menu_controller_current(&s_menu);
+
+    if (current == MENU_SCREEN_AI) {
+        if (bsp_display_lock(100) == ESP_OK) {
+            ai_screen_set_hardware_talk_pressed(s_body, true, &s_state);
+            bsp_display_unlock();
+        }
+
+        if (s_callbacks.ai_press != NULL) {
+            s_callbacks.ai_press();
+        }
+    } else if (current == MENU_SCREEN_STT) {
+        if (bsp_display_lock(100) == ESP_OK) {
+            stt_screen_set_hardware_talk_pressed(s_body, true, &s_state);
+            bsp_display_unlock();
+        }
+
+        if (s_callbacks.stt_press != NULL) {
+            s_callbacks.stt_press();
+        }
+    }
+}
+
+void ui_manager_handle_boot_release(void)
+{
+    menu_screen_t current = menu_controller_current(&s_menu);
+
+    if (current == MENU_SCREEN_AI) {
+        if (bsp_display_lock(100) == ESP_OK) {
+            ai_screen_set_hardware_talk_pressed(s_body, false, &s_state);
+            bsp_display_unlock();
+        }
+
+        if (s_callbacks.ai_release != NULL) {
+            s_callbacks.ai_release();
+        }
+    } else if (current == MENU_SCREEN_STT) {
+        if (bsp_display_lock(100) == ESP_OK) {
+            stt_screen_set_hardware_talk_pressed(s_body, false, &s_state);
+            bsp_display_unlock();
+        }
+
+        if (s_callbacks.stt_release != NULL) {
+            s_callbacks.stt_release();
+        }
+    }
 }
 
 void ui_manager_update_wifi_status(

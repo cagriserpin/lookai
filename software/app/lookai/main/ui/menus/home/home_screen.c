@@ -132,16 +132,27 @@ static void start_home_intro(void)
     lv_obj_set_style_border_width(overlay, 0, 0);
     lv_obj_set_style_radius(overlay, 0, 0);
     lv_obj_set_style_pad_all(overlay, 0, 0);
+    lv_obj_set_layout(overlay, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(overlay, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(
+        overlay,
+        LV_FLEX_ALIGN_CENTER,
+        LV_FLEX_ALIGN_CENTER,
+        LV_FLEX_ALIGN_CENTER
+    );
     lv_obj_clear_flag(overlay, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(overlay, LV_OBJ_FLAG_CLICKABLE);
 
     lv_obj_t *hello = lv_label_create(overlay);
     lv_label_set_text_static(hello, "Hello");
     lv_obj_set_style_text_font(hello, HOME_APP_TITLE_FONT, 0);
+    lv_obj_set_width(hello, UI_THEME_SCREEN_WIDTH);
+    lv_label_set_long_mode(hello, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_letter_space(hello, 3, 0);
+    lv_obj_set_style_text_align(hello, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_color(hello, lv_color_hex(UI_COLOR_TEXT), 0);
     lv_obj_set_style_text_opa(hello, LV_OPA_TRANSP, 0);
-    lv_obj_align(hello, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_update_layout(overlay);
 
     lv_anim_t anim;
     lv_anim_init(&anim);
